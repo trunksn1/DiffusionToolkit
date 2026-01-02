@@ -53,6 +53,7 @@ public class ServiceLocator
     private static NotificationService? _notificationService;
     private static ScanningService? _scanningService;
     private static ContextMenuService? _contextMenuService;
+    private static CivitaiPostService? _civitaiPostService;
 
     public static DataStore? DataStore => _dataStore;
     public static Settings? Settings => _settings;
@@ -143,6 +144,11 @@ public class ServiceLocator
     public static ContextMenuService ContextMenuService
     {
         get { return _contextMenuService ??= new ContextMenuService(); }
+    }
+
+    public static CivitaiPostService CivitaiPostService
+    {
+        get { return _civitaiPostService ??= new CivitaiPostService(); }
     }
 
     public static ExternalApplicationsService ExternalApplicationsService

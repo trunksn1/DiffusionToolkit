@@ -573,6 +573,7 @@
                     <Separator Style="{StaticResource FileSeparator}"/>
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="{lex:Loc Thumbnail.ContextMenu.Copy}" InputGestureText="Ctrl+C" Command="{Binding CopyCommand}" />
                     <!--<MenuItem IsEnabled="{Binding IsImage}" Header="{lex:Loc Thumbnail.ContextMenu.Move}" Command="{Binding MoveCommand}"/>-->
+                    <MenuItem Style="{StaticResource FileMenuItem}" Header="Post to CivitAI" Command="{Binding PostToCivitaiCommand}" />
                     <Separator Style="{StaticResource FileSeparator}"/>
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="{lex:Loc Thumbnail.ContextMenu.ExpandToFolder}" Command="{Binding ExpandToFolderCommand}"/>
                     <Separator Style="{StaticResource FileSeparator}"/>

@@ -62,6 +62,7 @@ public class ThumbnailViewModel : BaseNotify
     private ICommand _removeEntryCommand;
     private ICommand _moveCommand;
     private ICommand _copyCommand;
+    private ICommand _postToCivitaiCommand;
     private int _thumbnailSize;
     private ViewMode _viewMode;
     private int _pageSize;
@@ -384,6 +385,12 @@ public class ThumbnailViewModel : BaseNotify
     {
         get => _moveCommand;
         set => SetField(ref _moveCommand, value);
+    }
+
+    public ICommand PostToCivitaiCommand
+    {
+        get => _postToCivitaiCommand;
+        set => SetField(ref _postToCivitaiCommand, value);
     }
 
     public int ThumbnailSize

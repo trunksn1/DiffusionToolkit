@@ -80,6 +80,7 @@
                         <MenuItem Header="Actual Size" InputGestureText="CTRL+Shift+A" Command="{Binding MainModel.ToggleActualSize}" IsChecked="{Binding MainModel.ActualSize}"></MenuItem>
                         <Separator></Separator>
                         <MenuItem Header="Copy Path" Command="{Binding CopyPathCommand}"></MenuItem>
+                        <MenuItem Header="Post to CivitAI" Command="{Binding PostToCivitaiCommand}"></MenuItem>
                     </ContextMenu>
 
                     <!--Stretch="{Binding MainModel.FitToPreview, Converter={StaticResource stretch}, RelativeSource={RelativeSource  FindAncestor, AncestorType={x:Type UserControl}}}"-->

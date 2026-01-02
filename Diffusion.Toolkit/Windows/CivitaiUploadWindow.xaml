@@ -1,0 +1,52 @@
+<Window x:Class="Diffusion.Toolkit.Windows.CivitaiUploadWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Post to CivitAI"
+        Height="800"
+        Width="1200"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Status Bar -->
+        <Border Grid.Row="0" Background="#2A2A2A" Padding="10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="StatusText"
+                          Text="Loading CivitAI..."
+                          Foreground="White"
+                          VerticalAlignment="Center"
+                          Margin="0,0,20,0"/>
+                <ProgressBar x:Name="ProgressBar"
+                            Width="200"
+                            Height="20"
+                            IsIndeterminate="True"
+                            Visibility="Visible"/>
+            </StackPanel>
+        </Border>
+
+        <!-- WebView2 Browser -->
+        <wv2:WebView2 x:Name="WebView"
+                      Grid.Row="1"/>
+
+        <!-- Action Bar -->
+        <Border Grid.Row="2" Background="#F0F0F0" Padding="10" BorderBrush="#CCCCCC" BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock x:Name="HelpText"
+                          Text="The image will be uploaded automatically once the page loads."
+                          VerticalAlignment="Center"
+                          Margin="0,0,20,0"
+                          Foreground="#666"/>
+                <Button x:Name="CloseButton"
+                       Content="Close"
+                       Width="100"
+                       Height="30"
+                       Click="CloseButton_Click"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
