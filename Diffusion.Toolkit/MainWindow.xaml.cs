@@ -489,6 +489,11 @@ namespace Diffusion.Toolkit
 
             ServiceLocator.SetDataStore(dataStore);
 
+            // Initialize CivitAI extension data store (external database)
+            const string civitaiExtensionDbPath = @"C:\Users\trunk\AppData\Roaming\DiffusionToolkit\civitai-extension-trimmed.db";
+            var civitAiExtensionDataStore = new CivitAiExtensionDataStore(civitaiExtensionDbPath);
+            ServiceLocator.SetCivitAiExtensionDataStore(civitAiExtensionDataStore);
+
             var isFirstTime = false;
             IReadOnlyList<string> newFolders = null;
 

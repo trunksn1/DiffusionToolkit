@@ -26,6 +26,7 @@ public class ServiceLocator
     private static SearchService? _searchService;
     private static ThumbnailCache? _thumbnailCache;
     private static ThumbnailService? _thumbnailLoader;
+    private static CivitAiExtensionDataStore? _civitAiExtensionDataStore;
 
     public static DataStore? DataStore => _dataStore;
     public static Settings? Settings => _settings;
@@ -45,6 +46,11 @@ public class ServiceLocator
     public static void SetNavigatorService(NavigatorService navigatorService)
     {
         _navigatorService = navigatorService;
+    }
+
+    public static void SetCivitAiExtensionDataStore(CivitAiExtensionDataStore? dataStore)
+    {
+        _civitAiExtensionDataStore = dataStore;
     }
 
     public static PreviewService PreviewService
@@ -147,5 +153,12 @@ public class ServiceLocator
     {
         get { return field ??= new WindowService(); }
     }
+
+    public static CivitaiPostService CivitaiPostService
+    {
+        get { return field ??= new CivitaiPostService(); }
+    }
+
+    public static CivitAiExtensionDataStore? CivitAiExtensionDataStore => _civitAiExtensionDataStore;
 }
 

@@ -1174,6 +1174,72 @@ namespace Diffusion.Toolkit.Pages
 
                 }
 
+                // Load CivitAI extension data
+                if (ServiceLocator.CivitAiExtensionDataStore?.IsAvailable == true)
+                {
+                    var civitaiData = ServiceLocator.CivitAiExtensionDataStore.GetByPath(path);
+                    if (civitaiData != null && civitaiData.HasData)
+                    {
+                        imageViewModel.HasCivitaiData = true;
+                        imageViewModel.CivitaiLoraRiforgiati = civitaiData.LoraRiforgiati;
+                        imageViewModel.CivitaiLoraInForge = civitaiData.LoraInForge;
+                        imageViewModel.CivitaiReforgedTags = civitaiData.ReforgedTags;
+                        imageViewModel.CivitaiLoraHashes = civitaiData.LoraHashes;
+                        imageViewModel.CivitaiTiHashes = civitaiData.TiHashes;
+                        imageViewModel.CivitaiPicMetadata = civitaiData.PicMetadata;
+                        imageViewModel.CivitaiExif = civitaiData.Exif;
+
+                        // Extract CIV_ID from filename (pattern: __CIV_ID__123456.jpeg)
+                        var filename = System.IO.Path.GetFileName(path);
+                        var civIdMatch = Regex.Match(filename, @"__CIV_ID__(\d+)");
+                        if (civIdMatch.Success)
+                        {
+                            imageViewModel.CivitaiImageId = civIdMatch.Groups[1].Value;
+                            imageViewModel.OpenCivitaiPageCommand = new RelayCommand<object>(_ =>
+                            {
+                                var url = $"https://civitai.com/images/{imageViewModel.CivitaiImageId}";
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = url,
+                                    UseShellExecute = true
+                                });
+                            });
+                        }
+
+                        // Store original value for cancel functionality
+                        var originalLoraRiforgiati = civitaiData.LoraRiforgiati;
+
+                        // Toggle edit mode command
+                        imageViewModel.ToggleLoraRiforgiatiEditCommand = new RelayCommand<object>(_ =>
+                        {
+                            if (imageViewModel.IsLoraRiforgiatiEditMode)
+                            {
+                                // Cancel - restore original value
+                                imageViewModel.CivitaiLoraRiforgiati = originalLoraRiforgiati;
+                            }
+                            imageViewModel.IsLoraRiforgiatiEditMode = !imageViewModel.IsLoraRiforgiatiEditMode;
+                        });
+
+                        // Save command
+                        imageViewModel.SaveLoraRiforgiatiCommand = new RelayCommand<object>(_ =>
+                        {
+                            var success = ServiceLocator.CivitAiExtensionDataStore?.UpdateLoraRiforgiati(
+                                path, imageViewModel.CivitaiLoraRiforgiati) ?? false;
+
+                            if (success)
+                            {
+                                // Update the "original" value to the new saved value
+                                originalLoraRiforgiati = imageViewModel.CivitaiLoraRiforgiati;
+                                imageViewModel.IsLoraRiforgiatiEditMode = false;
+                            }
+                            else
+                            {
+                                // Could add error handling here
+                            }
+                        });
+                    }
+                }
+
                 _model.CurrentImage = imageViewModel;
 
                 if (updateViewed)

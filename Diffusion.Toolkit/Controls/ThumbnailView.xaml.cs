@@ -75,6 +75,7 @@ namespace Diffusion.Toolkit.Controls
             Model.RemoveEntryCommand = new RelayCommand<object>(o => RemoveEntry());
             Model.CopyCommand = new RelayCommand<object>(o => CopySelected());
             Model.MoveCommand = new RelayCommand<object>(o => MoveSelected());
+            Model.PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
             Model.RescanCommand = new AsyncCommand<object>(o => RescanSelected());
             Model.RescanFolderCommand = new AsyncCommand<object>(o => RescanFolder(true));
             Model.ScanFolderCommand = new AsyncCommand<object>(o => RescanFolder(false));
@@ -159,6 +160,12 @@ namespace Diffusion.Toolkit.Controls
         {
             var imageEntries = ThumbnailListView.SelectedItems.Cast<ImageEntry>().ToList();
             MoveFiles(imageEntries);
+        }
+
+        private void PostToCivitai()
+        {
+            var imageEntries = ThumbnailListView.SelectedItems.Cast<ImageEntry>().ToList();
+            ServiceLocator.CivitaiPostService.PostImages(imageEntries);
         }
 
         private void ModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)

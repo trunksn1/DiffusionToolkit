@@ -270,6 +270,138 @@
                     </Grid>
                 </Grid>
             </TabItem>
+            <TabItem Visibility="{Binding HasCivitaiData, Converter={StaticResource boolToVis}}" Background="Transparent" GotFocus="UIElement_OnGotFocus" HorizontalContentAlignment="Stretch">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="CivitAI" VerticalAlignment="Center"/>
+                        <Button Style="{DynamicResource BorderlessButton}"
+                                Command="{Binding OpenCivitaiPageCommand}"
+                                Visibility="{Binding HasCivitaiImageId, Converter={StaticResource boolToVis}}"
+                                ToolTip="Open on CivitAI"
+                                Margin="5,0,0,0"
+                                Padding="2"
+                                FontSize="12"
+                                Content="Ⓒ"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer Background="Transparent" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Background="Transparent">
+
+                        <local:AccordionControl x:Name="CivitaiLinkMetadata"
+                                                   Visibility="{Binding HasCivitaiImageId, Converter={StaticResource boolToVis}}"
+                                                   HeaderBackground="#80000000"
+                                                   Header="Link"
+                                                   Margin="0,0,0,5"
+                                                   State="Expanded">
+                            <Button Style="{DynamicResource BorderlessButton}"
+                                    Command="{Binding OpenCivitaiPageCommand}"
+                                    HorizontalAlignment="Left"
+                                    Cursor="Hand"
+                                    Padding="5">
+                                <TextBlock TextDecorations="Underline" Foreground="#3399FF">
+                                    <Run Text="https://civitai.com/images/"/><Run Text="{Binding CivitaiImageId, Mode=OneWay}"/>
+                                </TextBlock>
+                            </Button>
+                        </local:AccordionControl>
+
+                        <local:AccordionControl x:Name="LoraRiforgiatiMetadata"
+                                                   HeaderBackground="#80000000"
+                                                   Header="Lora Riforgiati"
+                                                   Margin="0,0,0,5"
+                                                   State="Collapsed">
+                            <local:AccordionControl.ButtonAreaContent>
+                                <Grid Background="{x:Null}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="80"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Style="{DynamicResource BorderlessButton}" Grid.Column="1"
+                                            Command="{Binding ToggleLoraRiforgiatiEditCommand}"
+                                            Visibility="{Binding IsLoraRiforgiatiReadOnly, Converter={StaticResource boolToVis}}"
+                                            Content="Edit"/>
+                                    <Button Style="{DynamicResource BorderlessButton}" Grid.Column="1"
+                                            Command="{Binding SaveLoraRiforgiatiCommand}"
+                                            Visibility="{Binding IsLoraRiforgiatiEditMode, Converter={StaticResource boolToVis}}"
+                                            Content="Save"/>
+                                    <Button Style="{DynamicResource BorderlessButton}" Grid.Column="2"
+                                            Command="{Binding ToggleLoraRiforgiatiEditCommand}"
+                                            Visibility="{Binding IsLoraRiforgiatiEditMode, Converter={StaticResource boolToVis}}"
+                                            Content="Cancel"/>
+                                </Grid>
+                            </local:AccordionControl.ButtonAreaContent>
+                            <TextBox Background="#00000000" FontSize="14"
+                                     BorderThickness="1"
+                                     BorderBrush="{DynamicResource SecondaryBrush}"
+                                     IsReadOnly="{Binding IsLoraRiforgiatiReadOnly}"
+                                     Padding="5" TextWrapping="WrapWithOverflow"
+                                     Text="{Binding CivitaiLoraRiforgiati, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True"/>
+                        </local:AccordionControl>
+
+                        <local:AccordionControl x:Name="LoraInForgeMetadata"
+                                                   HeaderBackground="#80000000"
+                                                   Header="Lora In Forge"
+                                                   Margin="0,0,0,5"
+                                                   State="Collapsed">
+                            <TextBox Background="#00000000" FontSize="14" BorderThickness="0"
+                                     IsReadOnly="True"
+                                     Padding="5" TextWrapping="WrapWithOverflow" Text="{Binding CivitaiLoraInForge}"/>
+                        </local:AccordionControl>
+
+                        <local:AccordionControl x:Name="ReforgedTagsMetadata"
+                                                   HeaderBackground="#80000000"
+                                                   Header="Reforged Tags"
+                                                   Margin="0,0,0,5"
+                                                   State="Collapsed">
+                            <TextBox Background="#00000000" FontSize="14" BorderThickness="0"
+                                     IsReadOnly="True"
+                                     Padding="5" TextWrapping="WrapWithOverflow" Text="{Binding CivitaiReforgedTags}"/>
+                        </local:AccordionControl>
+
+                        <local:AccordionControl x:Name="LoraHashesMetadata"
+                                                   HeaderBackground="#80000000"
+                                                   Header="Lora Hashes"
+                                                   Margin="0,0,0,5"
+                                                   State="Collapsed">
+                            <TextBox Background="#00000000" FontSize="14" BorderThickness="0"
+                                     IsReadOnly="True" FontFamily="Consolas"
+                                     Padding="5" TextWrapping="WrapWithOverflow" Text="{Binding CivitaiLoraHashes}"/>
+                        </local:AccordionControl>
+
+                        <local:AccordionControl x:Name="TiHashesMetadata"
+                                                   HeaderBackground="#80000000"
+                                                   Header="TI Hashes"
+                                                   Margin="0,0,0,5"
+                                                   State="Collapsed">
+                            <TextBox Background="#00000000" FontSize="14" BorderThickness="0"
+                                     IsReadOnly="True" FontFamily="Consolas"
+                                     Padding="5" TextWrapping="WrapWithOverflow" Text="{Binding CivitaiTiHashes}"/>
+                        </local:AccordionControl>
+
+                        <local:AccordionControl x:Name="PicMetadataMetadata"
+                                                   HeaderBackground="#80000000"
+                                                   Header="PicMetadata"
+                                                   Margin="0,0,0,5"
+                                                   State="Collapsed">
+                            <TextBox Background="#00000000" FontSize="14" BorderThickness="0"
+                                     IsReadOnly="True" FontFamily="Consolas"
+                                     Padding="5" TextWrapping="WrapWithOverflow" Text="{Binding CivitaiPicMetadata}"/>
+                        </local:AccordionControl>
+
+                        <local:AccordionControl x:Name="ExifMetadata"
+                                                   HeaderBackground="#80000000"
+                                                   Header="Exif"
+                                                   Margin="0,0,0,5"
+                                                   State="Collapsed">
+                            <TextBox Background="#00000000" FontSize="14" BorderThickness="0"
+                                     IsReadOnly="True" FontFamily="Consolas"
+                                     Padding="5" TextWrapping="WrapWithOverflow" Text="{Binding CivitaiExif}"/>
+                        </local:AccordionControl>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
             <TabItem Header="Workflow" Background="Transparent" GotFocus="UIElement_OnGotFocus"  HorizontalContentAlignment="Stretch">
                 <ScrollViewer Background="Transparent" VerticalScrollBarVisibility="Auto">
                     <local:ComfyNodeStack Nodes="{Binding Nodes}" Background="Transparent"></local:ComfyNodeStack>

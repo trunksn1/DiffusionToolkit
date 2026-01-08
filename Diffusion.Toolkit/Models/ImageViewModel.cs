@@ -18,6 +18,21 @@ public class ImageViewModel : BaseNotify
 
     private string _modelHash;
 
+    // CivitAI Extension Data
+    private string? _civitaiLoraRiforgiati;
+    private string? _civitaiLoraInForge;
+    private string? _civitaiReforgedTags;
+    private string? _civitaiLoraHashes;
+    private string? _civitaiTiHashes;
+    private string? _civitaiPicMetadata;
+    private string? _civitaiExif;
+    private bool _hasCivitaiData;
+    private bool _isLoraRiforgiatiEditMode;
+    private ICommand? _toggleLoraRiforgiatiEditCommand;
+    private ICommand? _saveLoraRiforgiatiCommand;
+    private string? _civitaiImageId;
+    private ICommand? _openCivitaiPageCommand;
+
     public ImageViewModel()
     {
         CopyPathCommand = new RelayCommand<object>(ServiceLocator.ContextMenuService.CopyPath);
@@ -292,6 +307,95 @@ public class ImageViewModel : BaseNotify
     {
         get;
         set => SetField(ref field, value);
+    }
+
+    // CivitAI Extension Data Properties
+    public bool HasCivitaiData
+    {
+        get => _hasCivitaiData;
+        set => SetField(ref _hasCivitaiData, value);
+    }
+
+    public string? CivitaiLoraRiforgiati
+    {
+        get => _civitaiLoraRiforgiati;
+        set => SetField(ref _civitaiLoraRiforgiati, value);
+    }
+
+    public string? CivitaiLoraInForge
+    {
+        get => _civitaiLoraInForge;
+        set => SetField(ref _civitaiLoraInForge, value);
+    }
+
+    public string? CivitaiReforgedTags
+    {
+        get => _civitaiReforgedTags;
+        set => SetField(ref _civitaiReforgedTags, value);
+    }
+
+    public string? CivitaiLoraHashes
+    {
+        get => _civitaiLoraHashes;
+        set => SetField(ref _civitaiLoraHashes, value);
+    }
+
+    public string? CivitaiTiHashes
+    {
+        get => _civitaiTiHashes;
+        set => SetField(ref _civitaiTiHashes, value);
+    }
+
+    public string? CivitaiPicMetadata
+    {
+        get => _civitaiPicMetadata;
+        set => SetField(ref _civitaiPicMetadata, value);
+    }
+
+    public string? CivitaiExif
+    {
+        get => _civitaiExif;
+        set => SetField(ref _civitaiExif, value);
+    }
+
+    public bool IsLoraRiforgiatiEditMode
+    {
+        get => _isLoraRiforgiatiEditMode;
+        set
+        {
+            if (SetField(ref _isLoraRiforgiatiEditMode, value))
+            {
+                OnPropertyChanged(nameof(IsLoraRiforgiatiReadOnly));
+            }
+        }
+    }
+
+    public bool IsLoraRiforgiatiReadOnly => !_isLoraRiforgiatiEditMode;
+
+    public ICommand? ToggleLoraRiforgiatiEditCommand
+    {
+        get => _toggleLoraRiforgiatiEditCommand;
+        set => SetField(ref _toggleLoraRiforgiatiEditCommand, value);
+    }
+
+    public ICommand? SaveLoraRiforgiatiCommand
+    {
+        get => _saveLoraRiforgiatiCommand;
+        set => SetField(ref _saveLoraRiforgiatiCommand, value);
+    }
+
+    public string? CivitaiImageId
+    {
+        get => _civitaiImageId;
+        set => SetField(ref _civitaiImageId, value);
+    }
+
+    public bool HasCivitaiImageId => !string.IsNullOrEmpty(_civitaiImageId);
+
+    public ICommand? OpenCivitaiPageCommand
+    {
+        get => _openCivitaiPageCommand;
+        set => SetField(ref _openCivitaiPageCommand, value);
     }
 }
 

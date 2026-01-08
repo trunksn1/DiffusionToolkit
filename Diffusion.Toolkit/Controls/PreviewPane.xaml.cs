@@ -140,6 +140,7 @@ namespace Diffusion.Toolkit.Controls
         }
 
         public ICommand CopyPathCommand { get; set; }
+        public ICommand PostToCivitaiCommand { get; set; }
 
 
         private ScrollDragger? _scrollDragger = null;
@@ -157,6 +158,7 @@ namespace Diffusion.Toolkit.Controls
 
 
             CopyPathCommand = new RelayCommand<object>(ServiceLocator.ContextMenuService.CopyPath);
+            PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
 
             if (ServiceLocator.MainModel != null)
             {
@@ -175,6 +177,21 @@ namespace Diffusion.Toolkit.Controls
             {
                 ActualSize();
             }
+        }
+
+        private void PostToCivitai()
+        {
+            if (Image == null) return;
+
+            // Create an ImageEntry from the current ImageViewModel
+            var imageEntry = new ImageEntry(0)
+            {
+                Id = Image.Id,
+                Path = Image.Path,
+                EntryType = EntryType.File
+            };
+
+            ServiceLocator.CivitaiPostService.PostImage(imageEntry);
         }
 
         private void FitToPreview()
