@@ -99,6 +99,10 @@ namespace Diffusion.Toolkit.Pages
             _model.HashCache = _settings.HashCache;
             _model.PortableMode = _settings.PortableMode;
 
+            // Civitai settings
+            _model.CivitaiAlwaysPromptForAlbum = _settings.CivitaiAlwaysPromptForAlbum;
+            LoadCivitaiAlbumDropdown();
+
             _model.StoreMetadata = _settings.StoreMetadata;
             _model.StoreWorkflow = _settings.StoreWorkflow;
             _model.ScanUnavailable = _settings.ScanUnavailable;
@@ -400,7 +404,49 @@ namespace Diffusion.Toolkit.Pages
 
                 _settings.Culture = _model.Culture;
 
+                // Civitai settings
+                _settings.CivitaiAlwaysPromptForAlbum = _model.CivitaiAlwaysPromptForAlbum;
+                // CivitaiDefaultAlbum is saved when the user selects from dropdown or clicks Clear
+
             }
+        }
+
+        private void LoadCivitaiAlbumDropdown()
+        {
+            var albums = _dataStore.GetAlbumsByName();
+
+            CivitaiDefaultAlbumComboBox.Items.Clear();
+            CivitaiDefaultAlbumComboBox.Items.Add("None");
+
+            foreach (var album in albums)
+            {
+                CivitaiDefaultAlbumComboBox.Items.Add(album.Name);
+            }
+
+            // Select the current default
+            if (string.IsNullOrEmpty(_settings.CivitaiDefaultAlbum))
+            {
+                CivitaiDefaultAlbumComboBox.SelectedIndex = 0; // None
+            }
+            else
+            {
+                var index = CivitaiDefaultAlbumComboBox.Items.IndexOf(_settings.CivitaiDefaultAlbum);
+                CivitaiDefaultAlbumComboBox.SelectedIndex = index >= 0 ? index : 0;
+            }
+        }
+
+        private void CivitaiDefaultAlbumComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CivitaiDefaultAlbumComboBox.SelectedItem != null)
+            {
+                _settings.CivitaiDefaultAlbum = CivitaiDefaultAlbumComboBox.SelectedItem.ToString();
+            }
+        }
+
+        private void ClearCivitaiDefaultAlbum_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.CivitaiDefaultAlbum = null;
+            CivitaiDefaultAlbumComboBox.SelectedIndex = 0; // Select "None"
         }
 
 

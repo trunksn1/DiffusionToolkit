@@ -270,6 +270,12 @@ public class SettingsModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public bool CivitaiAlwaysPromptForAlbum
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
 
     public override bool IsDirty => _isDirty;
 

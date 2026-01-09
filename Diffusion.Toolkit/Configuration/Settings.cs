@@ -465,6 +465,19 @@ public class Settings : SettingsContainer, IScanOptions
         get;
         set => UpdateValue(ref field, value);
     }
+
+    // Civitai Scraper Settings
+    public string? CivitaiDefaultAlbum
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
+
+    public bool CivitaiAlwaysPromptForAlbum
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
 }
 
 public class PreviewWindowState

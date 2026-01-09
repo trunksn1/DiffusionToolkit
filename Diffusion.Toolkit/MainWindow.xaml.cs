@@ -115,6 +115,9 @@ namespace Diffusion.Toolkit
                 _model.Rescan = new AsyncCommand<object>(RescanTask);
                 _model.Rebuild = new AsyncCommand<object>(RebuildTask);
 
+                _model.LaunchCivitaiScraperCommand = new RelayCommand<object>((o) => LaunchCivitaiScraper());
+                _model.LaunchCivitaiPipelineCommand = new AsyncCommand<object>(async (o) => await LaunchCivitaiPipeline());
+
                 _model.ReloadHashes = new AsyncCommand<object>(async (o) =>
                 {
                     LoadModels();
@@ -1159,6 +1162,157 @@ namespace Diffusion.Toolkit
                 await ServiceLocator.MessageService.ShowMedium("You have not setup any image folders.\r\n\r\nAdd one or more folders first, then click the Scan Folders for new images icon in the toolbar.", "Setup", PopupButtons.OK);
             }
         }
+
+        private async void LaunchCivitaiScraper()
+        {
+            try
+            {
+                var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "NSFW_CIVITAI_Collections_Scraper.bat");
+
+                if (!File.Exists(scriptPath))
+                {
+                    MessageBox.Show(this, $"Script not found at: {scriptPath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var scriptDirectory = Path.GetDirectoryName(scriptPath);
+                var markerFile = Path.Combine(scriptDirectory, ".download_complete");
+
+                // Delete old marker file if it exists
+                if (File.Exists(markerFile))
+                {
+                    File.Delete(markerFile);
+                }
+
+                var processInfo = new ProcessStartInfo()
+                {
+                    FileName = scriptPath,
+                    UseShellExecute = true,
+                    WorkingDirectory = scriptDirectory
+                };
+
+                Process.Start(processInfo);
+
+                // Wait for the completion marker file with cancellation support
+                var cts = new CancellationTokenSource();
+
+                // Poll for the completion marker file
+                await Task.Run(async () =>
+                {
+                    while (!File.Exists(markerFile) && !cts.Token.IsCancellationRequested)
+                    {
+                        await Task.Delay(1000, cts.Token); // Check every second
+                    }
+                }, cts.Token);
+
+                // Only proceed if we weren't cancelled and the file exists
+                if (File.Exists(markerFile))
+                {
+                    // Clean up marker file
+                    File.Delete(markerFile);
+
+                    // Call post-completion handler
+                    await OnCivitaiScraperCompleted();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // User cancelled the operation, just return
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Error launching scraper: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task OnCivitaiScraperCompleted()
+        {
+            try
+            {
+                // Phase 3: Auto-refresh by scanning for new images
+                if (await ServiceLocator.ProgressService.TryStartTask())
+                {
+                    try
+                    {
+                        ServiceLocator.ProgressService.SetStatus("Scanning for new images...");
+                        await ServiceLocator.ScanningService.ScanWatchedFolders(false, false, ServiceLocator.ProgressService.CancellationToken);
+
+                        // Refresh the search to show new images
+                        Dispatcher.Invoke(() =>
+                        {
+                            _search?.SearchImages(null);
+                        });
+                    }
+                    finally
+                    {
+                        ServiceLocator.ProgressService.CompleteTask();
+                    }
+                }
+
+                // Show notification that download is complete
+                ServiceLocator.ToastService.Toast("Download complete! New images have been scanned.", "Civitai Scraper", 5);
+
+                // Phase 4: Album assignment prompt (simplified version)
+                // Check if we should prompt for album assignment
+                if (_settings.CivitaiAlwaysPromptForAlbum ||
+                    string.IsNullOrEmpty(_settings.CivitaiDefaultAlbum) ||
+                    _settings.CivitaiDefaultAlbum == "None")
+                {
+                    // Show info message that user can manually assign to albums
+                    await ServiceLocator.MessageService.Show(
+                        "New images have been added to your library.\n\n" +
+                        "To assign them to an album:\n" +
+                        "1. Use the search or filter to find the new images\n" +
+                        "2. Select them\n" +
+                        "3. Right-click and choose 'Add to Album'\n\n" +
+                        "You can configure a default album in Settings to skip this message.",
+                        "Images Downloaded",
+                        PopupButtons.OK);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error in OnCivitaiScraperCompleted: {ex.Message}");
+                await ServiceLocator.MessageService.Show($"Error processing downloaded images: {ex.Message}", "Error", PopupButtons.OK);
+            }
+        }
+
+        private async Task LaunchCivitaiPipeline()
+        {
+            try
+            {
+                var result = await ServiceLocator.MessageService.Show(
+                    "This will close Diffusion Toolkit to run the Civitai Collections Pipeline.\n\nThe application will automatically reopen when the pipeline is complete.\n\nDo you want to continue?",
+                    "Launch Civitai Pipeline",
+                    PopupButtons.YesNo);
+
+                if (result == PopupResult.Yes)
+                {
+                    var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "Civitai_Collections_Pipeline.bat");
+
+                    if (!File.Exists(scriptPath))
+                    {
+                        await ServiceLocator.MessageService.Show($"Script not found at: {scriptPath}", "Error", PopupButtons.OK);
+                        return;
+                    }
+
+                    var processInfo = new ProcessStartInfo()
+                    {
+                        FileName = scriptPath,
+                        UseShellExecute = true,
+                        WorkingDirectory = Path.GetDirectoryName(scriptPath),
+                        Verb = "runas" // Run as administrator
+                    };
+
+                    Process.Start(processInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                await ServiceLocator.MessageService.Show($"Error launching pipeline: {ex.Message}", "Error", PopupButtons.OK);
+            }
+        }
+
 
 
     }

@@ -188,6 +188,29 @@
 
                         <CheckBox IsChecked="{Binding SoftwareOnly}" Margin="0,10,0,0" Content="{lex:Loc Settings.General.SoftwareOnly}"></CheckBox>
 
+                        <Separator Margin="0,20,0,10"/>
+
+                        <Label Content="Civitai Scraper" FontWeight="Bold"></Label>
+
+                        <StackPanel Orientation="Vertical" Margin="0,10,0,0">
+                            <Label Content="Default Album for Downloads:"></Label>
+                            <ComboBox x:Name="CivitaiDefaultAlbumComboBox"
+                                      Height="26"
+                                      Margin="0,5,0,10"
+                                      SelectionChanged="CivitaiDefaultAlbumComboBox_SelectionChanged"/>
+
+                            <CheckBox IsChecked="{Binding CivitaiAlwaysPromptForAlbum}"
+                                      Margin="0,0,0,10"
+                                      Content="Always prompt for album selection after download"></CheckBox>
+
+                            <Button Content="Clear Default Album"
+                                    Width="150"
+                                    Height="26"
+                                    HorizontalAlignment="Left"
+                                    Click="ClearCivitaiDefaultAlbum_Click"
+                                    Margin="0,5,0,0"/>
+                        </StackPanel>
+
                     </StackPanel>
                 </Grid>
 

@@ -495,6 +495,14 @@
                             <fa:ImageAwesome ToolTip="Scan folders for new images (Ctrl+R)" Icon="Refresh" Width="16" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" HorizontalAlignment="Center">
                             </fa:ImageAwesome>
                         </Button>
+                        <Button Margin="0,5,0,10" Height="16" Width="24" Style="{StaticResource BorderlessToolbarButton}" Command="{Binding LaunchCivitaiScraperCommand}">
+                            <fa:ImageAwesome ToolTip="Launch NSFW Civitai Collections Scraper" Icon="Download" Width="16" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            </fa:ImageAwesome>
+                        </Button>
+                        <Button Margin="0,5,0,10" Height="16" Width="24" Style="{StaticResource BorderlessToolbarButton}" Command="{Binding LaunchCivitaiPipelineCommand}">
+                            <fa:ImageAwesome ToolTip="Launch Civitai Collections Pipeline (will close app)" Icon="Cogs" Width="16" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            </fa:ImageAwesome>
+                        </Button>
                     </StackPanel>
                 </Grid>
                 <Frame x:Name="Frame" Content="{Binding Page}" NavigationUIVisibility="Hidden"></Frame>

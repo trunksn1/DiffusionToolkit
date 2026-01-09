@@ -67,6 +67,18 @@ public class MainModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public ICommand LaunchCivitaiScraperCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public ICommand LaunchCivitaiPipelineCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public ICommand RenameFileCommand { get; set; }
 
     public ICommand OpenWithCommand
