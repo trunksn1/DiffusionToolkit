@@ -636,7 +636,60 @@ namespace Diffusion.Database
 
         public void RemoveImagesFromFolder(string path, bool recursive)
         {
-            
+
+        }
+
+        public IEnumerable<int> GetImageIdsByPaths(IEnumerable<string> paths)
+        {
+            var pathsList = paths.ToList();
+            if (!pathsList.Any())
+            {
+                return Enumerable.Empty<int>();
+            }
+
+            using var db = OpenConnection();
+
+            var imageIds = new List<int>();
+
+            lock (_lock)
+            {
+                // Simple loop approach - works reliably
+                foreach (var path in pathsList)
+                {
+                    Logger.Log($"GetImageIdsByPaths: Querying for path: {path}");
+                    var images = db.Query<Image>("SELECT * FROM Image WHERE Path = ?", path);
+                    var image = images.FirstOrDefault();
+
+                    if (image != null)
+                    {
+                        Logger.Log($"GetImageIdsByPaths: FOUND - Id={image.Id}");
+                        imageIds.Add(image.Id);
+                    }
+                    else
+                    {
+                        Logger.Log($"GetImageIdsByPaths: NOT FOUND - returning 0");
+                        imageIds.Add(0); // Or skip it entirely
+                    }
+                }
+
+                return imageIds;
+            }
+        }
+
+        public Image? GetImageByPath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return null;
+            }
+
+            using var db = OpenConnection();
+
+            lock (_lock)
+            {
+                var images = db.Query<Image>("SELECT * FROM Image WHERE Path = ?", path);
+                return images.FirstOrDefault();
+            }
         }
     }
 

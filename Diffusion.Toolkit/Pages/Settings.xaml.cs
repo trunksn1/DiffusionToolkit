@@ -449,6 +449,28 @@ namespace Diffusion.Toolkit.Pages
             CivitaiDefaultAlbumComboBox.SelectedIndex = 0; // Select "None"
         }
 
+        private void BrowseCivitaiScraperPath_OnClick(object sender, RoutedEventArgs e)
+        {
+            using var dialog = new CommonOpenFileDialog();
+            dialog.IsFolderPicker = true;
+            dialog.Title = "Select Civitai Collections Scraper Repository Folder";
+            if (dialog.ShowDialog(this._window) == CommonFileDialogResult.Ok)
+            {
+                _settings.CivitaiScraperRepositoryPath = dialog.FileName;
+            }
+        }
+
+        private void BrowseCivitaiPipelinePath_OnClick(object sender, RoutedEventArgs e)
+        {
+            using var dialog = new CommonOpenFileDialog();
+            dialog.IsFolderPicker = true;
+            dialog.Title = "Select Civitai Pipeline Repository Folder";
+            if (dialog.ShowDialog(this._window) == CommonFileDialogResult.Ok)
+            {
+                _settings.CivitaiPipelineRepositoryPath = dialog.FileName;
+            }
+        }
+
 
     }
 

@@ -467,6 +467,18 @@ public class Settings : SettingsContainer, IScanOptions
     }
 
     // Civitai Scraper Settings
+    public string? CivitaiScraperRepositoryPath
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
+
+    public string? CivitaiPipelineRepositoryPath
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
+
     public string? CivitaiDefaultAlbum
     {
         get;

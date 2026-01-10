@@ -3,6 +3,7 @@ using Diffusion.Database;
 using Diffusion.Toolkit.Models;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -1163,57 +1164,163 @@ namespace Diffusion.Toolkit
             }
         }
 
+        private string? _selectedAlbumForDownload = null;
+        private string _downloadStartTime = "";
+
         private async void LaunchCivitaiScraper()
         {
             try
             {
-                var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "NSFW_CIVITAI_Collections_Scraper.bat");
+                Logger.Log("==========================================");
+                Logger.Log("LaunchCivitaiScraper: STARTING");
+                Logger.Log("==========================================");
 
-                if (!File.Exists(scriptPath))
+                // BEFORE launching: Check if we need to prompt for album selection
+                _selectedAlbumForDownload = null;
+                Logger.Log("LaunchCivitaiScraper: Reset _selectedAlbumForDownload to null");
+
+                // Check if settings are initialized
+                if (_settings == null)
                 {
-                    MessageBox.Show(this, $"Script not found at: {scriptPath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Logger.Log("LaunchCivitaiScraper: ERROR - Settings is null!");
+                    MessageBox.Show(this, "Settings not initialized", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                var scriptDirectory = Path.GetDirectoryName(scriptPath);
-                var markerFile = Path.Combine(scriptDirectory, ".download_complete");
+                Logger.Log($"LaunchCivitaiScraper: Settings - AlwaysPrompt={_settings.CivitaiAlwaysPromptForAlbum}, DefaultAlbum={_settings.CivitaiDefaultAlbum}");
 
-                // Delete old marker file if it exists
-                if (File.Exists(markerFile))
+                bool needsPrompt = _settings.CivitaiAlwaysPromptForAlbum ||
+                                  string.IsNullOrEmpty(_settings.CivitaiDefaultAlbum) ||
+                                  _settings.CivitaiDefaultAlbum == "None";
+
+                Logger.Log($"LaunchCivitaiScraper: needsPrompt = {needsPrompt}");
+
+                if (needsPrompt)
                 {
-                    File.Delete(markerFile);
+                    Logger.Log("LaunchCivitaiScraper: Need to show album selection dialog");
+
+                    try
+                    {
+                        // Show album selection dialog BEFORE downloading
+                        // Ensure albums are loaded
+                        if (_model?.Albums == null || _model.Albums.Count == 0)
+                        {
+                            Logger.Log("LaunchCivitaiScraper: Loading albums");
+                            LoadAlbums();
+                        }
+
+                        Logger.Log($"LaunchCivitaiScraper: Albums count: {_model?.Albums?.Count ?? 0}");
+
+                        var albumsToPass = _model?.Albums ?? new ObservableCollection<AlbumModel>();
+                        Logger.Log($"LaunchCivitaiScraper: Creating dialog with {albumsToPass.Count} albums");
+
+                        var window = new CivitaiAlbumSelectionWindow(albumsToPass);
+                        window.Owner = this;
+
+                        Logger.Log("LaunchCivitaiScraper: Showing dialog");
+                        var result = window.ShowDialog();
+
+                        if (result != true)
+                        {
+                            Logger.Log("LaunchCivitaiScraper: User cancelled");
+                            // User cancelled, don't launch script
+                            return;
+                        }
+
+                        _selectedAlbumForDownload = window.SelectedAlbumName;
+                        Logger.Log($"LaunchCivitaiScraper: Selected album: {_selectedAlbumForDownload}");
+
+                        // Save as default if user checked "Remember"
+                        if (window.RememberChoice)
+                        {
+                            _settings.CivitaiDefaultAlbum = _selectedAlbumForDownload ?? "None";
+                            Logger.Log("LaunchCivitaiScraper: Saved as default");
+                        }
+                    }
+                    catch (Exception dialogEx)
+                    {
+                        Logger.Log($"LaunchCivitaiScraper: ERROR showing dialog - {dialogEx.Message}");
+                        Logger.Log($"LaunchCivitaiScraper: Stack trace: {dialogEx.StackTrace}");
+                        MessageBox.Show(this, $"Error showing album selection dialog:\n\n{dialogEx.Message}\n\nSee log for details.", "Dialog Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    // Use the default album setting
+                    _selectedAlbumForDownload = _settings.CivitaiDefaultAlbum;
+                    Logger.Log($"LaunchCivitaiScraper: Using default album: {_selectedAlbumForDownload}");
                 }
 
+                // Now launch Python script directly
+                // Check if Civitai scraper repository path is configured
+                if (string.IsNullOrEmpty(_settings.CivitaiScraperRepositoryPath))
+                {
+                    MessageBox.Show(this, "Civitai Collections Scraper repository path is not configured.\n\nPlease set it in Settings.", "Configuration Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Find Python executable in virtual environment
+                var pythonPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, ".venv", "Scripts", "python.exe");
+
+                if (!File.Exists(pythonPath))
+                {
+                    MessageBox.Show(this, $"Python executable not found at: {pythonPath}\n\nPlease ensure the virtual environment is set up correctly.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var mainPyPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, "main.py");
+
+                if (!File.Exists(mainPyPath))
+                {
+                    MessageBox.Show(this, $"main.py not found at: {mainPyPath}\n\nPlease verify the Civitai Collections Scraper repository path in Settings.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // Record the current time before starting download
+                // Format: "YYYY-MM-DD HH:MM:SS" to match civitai_state.db created_at column
+                _downloadStartTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                Logger.Log($"LaunchCivitaiScraper: Recording download start time = {_downloadStartTime}");
+
+                var civitaiDbPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, "civitai_state.db");
+
+                Logger.Log($"LaunchCivitaiScraper: Python path: {pythonPath}");
+                Logger.Log($"LaunchCivitaiScraper: main.py path: {mainPyPath}");
+                Logger.Log($"LaunchCivitaiScraper: Working directory: {_settings.CivitaiScraperRepositoryPath}");
+
+                // Launch Python process directly
                 var processInfo = new ProcessStartInfo()
                 {
-                    FileName = scriptPath,
-                    UseShellExecute = true,
-                    WorkingDirectory = scriptDirectory
+                    FileName = pythonPath,
+                    Arguments = "main.py sync",
+                    WorkingDirectory = _settings.CivitaiScraperRepositoryPath,
+                    UseShellExecute = true,  // Show console window
+                    CreateNoWindow = false
                 };
 
-                Process.Start(processInfo);
+                Logger.Log("LaunchCivitaiScraper: Starting Python process...");
+                var process = Process.Start(processInfo);
 
-                // Wait for the completion marker file with cancellation support
-                var cts = new CancellationTokenSource();
-
-                // Poll for the completion marker file
-                await Task.Run(async () =>
+                if (process == null)
                 {
-                    while (!File.Exists(markerFile) && !cts.Token.IsCancellationRequested)
-                    {
-                        await Task.Delay(1000, cts.Token); // Check every second
-                    }
-                }, cts.Token);
-
-                // Only proceed if we weren't cancelled and the file exists
-                if (File.Exists(markerFile))
-                {
-                    // Clean up marker file
-                    File.Delete(markerFile);
-
-                    // Call post-completion handler
-                    await OnCivitaiScraperCompleted();
+                    Logger.Log("LaunchCivitaiScraper: ERROR - Failed to start Python process");
+                    MessageBox.Show(this, "Failed to start Civitai scraper process.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
                 }
+
+                Logger.Log($"LaunchCivitaiScraper: Process started with PID {process.Id}");
+
+                // Wait for process to complete in background
+                await Task.Run(() =>
+                {
+                    Logger.Log("LaunchCivitaiScraper: Waiting for process to complete...");
+                    process.WaitForExit();
+                    Logger.Log($"LaunchCivitaiScraper: Process exited with code {process.ExitCode}");
+                });
+
+                // Call post-completion handler
+                Logger.Log("LaunchCivitaiScraper: Process completed, calling OnCivitaiScraperCompleted...");
+                await OnCivitaiScraperCompleted();
             }
             catch (OperationCanceledException)
             {
@@ -1229,52 +1336,254 @@ namespace Diffusion.Toolkit
         {
             try
             {
-                // Phase 3: Auto-refresh by scanning for new images
+                Logger.Log("======================================");
+                Logger.Log("OnCivitaiScraperCompleted: STARTING");
+                Logger.Log($"OnCivitaiScraperCompleted: Selected album = '{_selectedAlbumForDownload}'");
+                Logger.Log($"OnCivitaiScraperCompleted: Download start time = {_downloadStartTime}");
+                Logger.Log("======================================");
+
+                // Auto-refresh by scanning for new images
+                Logger.Log("OnCivitaiScraperCompleted: Starting scan for new images");
                 if (await ServiceLocator.ProgressService.TryStartTask())
                 {
                     try
                     {
                         ServiceLocator.ProgressService.SetStatus("Scanning for new images...");
                         await ServiceLocator.ScanningService.ScanWatchedFolders(false, false, ServiceLocator.ProgressService.CancellationToken);
+                        Logger.Log("OnCivitaiScraperCompleted: Scan completed successfully");
 
                         // Refresh the search to show new images
                         Dispatcher.Invoke(() =>
                         {
                             _search?.SearchImages(null);
                         });
+                        Logger.Log("OnCivitaiScraperCompleted: Search refreshed");
                     }
                     finally
                     {
                         ServiceLocator.ProgressService.CompleteTask();
                     }
                 }
+                else
+                {
+                    Logger.Log("OnCivitaiScraperCompleted: Could not start progress task for scanning");
+                }
+
+                // Wait 10 seconds to give the database time to complete all writes
+                Logger.Log("OnCivitaiScraperCompleted: Waiting 10 seconds for database to finalize writes...");
+                await Task.Delay(10000);
+                Logger.Log("OnCivitaiScraperCompleted: Wait completed, proceeding with album assignment");
+
+                // Assign downloaded images to the selected album
+                Logger.Log($"OnCivitaiScraperCompleted: Checking if should assign to album...");
+                Logger.Log($"OnCivitaiScraperCompleted: _selectedAlbumForDownload IsNullOrEmpty = {string.IsNullOrEmpty(_selectedAlbumForDownload)}");
+                Logger.Log($"OnCivitaiScraperCompleted: _selectedAlbumForDownload == 'None' = {_selectedAlbumForDownload == "None"}");
+
+                if (!string.IsNullOrEmpty(_selectedAlbumForDownload) && _selectedAlbumForDownload != "None")
+                {
+                    Logger.Log($"OnCivitaiScraperCompleted: YES - Calling AssignDownloadedImagesToAlbum with album '{_selectedAlbumForDownload}'");
+                    await AssignDownloadedImagesToAlbum(_selectedAlbumForDownload);
+                    Logger.Log("OnCivitaiScraperCompleted: AssignDownloadedImagesToAlbum completed");
+                }
+                else
+                {
+                    Logger.Log("OnCivitaiScraperCompleted: NO - Skipping album assignment");
+                }
 
                 // Show notification that download is complete
-                ServiceLocator.ToastService.Toast("Download complete! New images have been scanned.", "Civitai Scraper", 5);
+                string message = "Download complete! New images have been scanned.";
 
-                // Phase 4: Album assignment prompt (simplified version)
-                // Check if we should prompt for album assignment
-                if (_settings.CivitaiAlwaysPromptForAlbum ||
-                    string.IsNullOrEmpty(_settings.CivitaiDefaultAlbum) ||
-                    _settings.CivitaiDefaultAlbum == "None")
+                if (!string.IsNullOrEmpty(_selectedAlbumForDownload) && _selectedAlbumForDownload != "None")
                 {
-                    // Show info message that user can manually assign to albums
-                    await ServiceLocator.MessageService.Show(
-                        "New images have been added to your library.\n\n" +
-                        "To assign them to an album:\n" +
-                        "1. Use the search or filter to find the new images\n" +
-                        "2. Select them\n" +
-                        "3. Right-click and choose 'Add to Album'\n\n" +
-                        "You can configure a default album in Settings to skip this message.",
-                        "Images Downloaded",
-                        PopupButtons.OK);
+                    message = $"Download complete! New images have been scanned and assigned to album '{_selectedAlbumForDownload}'.";
+                }
+
+                Logger.Log($"OnCivitaiScraperCompleted: Showing toast: {message}");
+                ServiceLocator.ToastService.Toast(message, "Civitai Scraper", 5);
+                Logger.Log("OnCivitaiScraperCompleted: COMPLETED SUCCESSFULLY");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"OnCivitaiScraperCompleted: ERROR - {ex.Message}");
+                Logger.Log($"OnCivitaiScraperCompleted: Stack trace - {ex.StackTrace}");
+                await ServiceLocator.MessageService.Show($"Error processing downloaded images: {ex.Message}", "Error", PopupButtons.OK);
+            }
+        }
+
+        private async Task AssignDownloadedImagesToAlbum(string albumName)
+        {
+            try
+            {
+                Logger.Log($"AssignDownloadedImagesToAlbum: Starting for album '{albumName}'");
+
+                // Get the album from the database
+                var album = ServiceLocator.DataStore.GetAlbumByName(albumName);
+                if (album == null)
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum: Album '{albumName}' not found");
+                    return;
+                }
+
+                Logger.Log($"AssignDownloadedImagesToAlbum: Found album with ID {album.Id}");
+
+                // Query the Civitai scraper's database for recently downloaded files
+                Logger.Log($"AssignDownloadedImagesToAlbum: Checking repository path...");
+                Logger.Log($"AssignDownloadedImagesToAlbum: _settings?.CivitaiScraperRepositoryPath = '{_settings?.CivitaiScraperRepositoryPath}'");
+
+                if (string.IsNullOrEmpty(_settings?.CivitaiScraperRepositoryPath))
+                {
+                    Logger.Log("AssignDownloadedImagesToAlbum: ERROR - Civitai scraper repository path not configured");
+                    return;
+                }
+
+                var civitaiDbPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, "civitai_state.db");
+                Logger.Log($"AssignDownloadedImagesToAlbum: Civitai database path = '{civitaiDbPath}'");
+                Logger.Log($"AssignDownloadedImagesToAlbum: Database exists = {File.Exists(civitaiDbPath)}");
+
+                if (!File.Exists(civitaiDbPath))
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum: ERROR - Civitai database not found at {civitaiDbPath}");
+                    return;
+                }
+
+                Logger.Log($"AssignDownloadedImagesToAlbum: Opening Civitai database and querying downloads...");
+                Logger.Log($"AssignDownloadedImagesToAlbum: Looking for downloads with created_at >= '{_downloadStartTime}'");
+
+                var downloadedPaths = new List<string>();
+
+                // Query for files created at or after the download start time
+                using (var connection = new SQLite.SQLiteConnection(civitaiDbPath, SQLite.SQLiteOpenFlags.ReadOnly))
+                {
+                    var query = "SELECT local_path FROM downloads WHERE status = 'completed' AND updated_at > ?";
+                    Logger.Log($"AssignDownloadedImagesToAlbum: SQL Query = {query}");
+                    Logger.Log($"AssignDownloadedImagesToAlbum: Query parameter (download start time) = '{_downloadStartTime}");
+
+                    var results = connection.Query<CivitaiDownloadRecord>(query, _downloadStartTime);
+                    Logger.Log($"AssignDownloadedImagesToAlbum: Query returned {results.Count} results");
+
+                    foreach (var record in results)
+                    {
+                        if (!string.IsNullOrEmpty(record.local_path))
+                        {
+                            Logger.Log($"AssignDownloadedImagesToAlbum:   - Found path: {record.local_path}");
+                            downloadedPaths.Add(record.local_path);
+                        }
+                        else
+                        {
+                            Logger.Log($"AssignDownloadedImagesToAlbum:   - Skipped record with empty path");
+                        }
+                    }
+                }
+
+                Logger.Log($"AssignDownloadedImagesToAlbum: Total downloaded files to process = {downloadedPaths.Count}");
+
+                if (downloadedPaths.Count == 0)
+                {
+                    Logger.Log("AssignDownloadedImagesToAlbum: WARNING - No new downloads to assign (query returned 0 results)");
+                    return;
+                }
+
+                // Get image IDs from the Diffusion Toolkit database
+                Logger.Log($"AssignDownloadedImagesToAlbum: ========================================");
+                Logger.Log($"AssignDownloadedImagesToAlbum: Querying Diffusion Toolkit database for image IDs...");
+                Logger.Log($"AssignDownloadedImagesToAlbum: Looking for {downloadedPaths.Count} paths in Image table");
+                Logger.Log($"AssignDownloadedImagesToAlbum: Paths being searched:");
+                for (int i = 0; i < Math.Min(10, downloadedPaths.Count); i++)
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum:   [{i + 1}] {downloadedPaths[i]}");
+                }
+                if (downloadedPaths.Count > 10)
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum:   ... and {downloadedPaths.Count - 10} more paths");
+                }
+
+                var imageIds = ServiceLocator.DataStore.GetImageIdsByPaths(downloadedPaths).ToList();
+
+                Logger.Log($"AssignDownloadedImagesToAlbum: Query completed - Found {imageIds.Count} matching image IDs");
+
+                // Enhanced logging: Show full row data for each path
+                Logger.Log($"AssignDownloadedImagesToAlbum: Detailed row information from Image table:");
+                for (int i = 0; i < Math.Min(10, downloadedPaths.Count); i++)
+                {
+                    var path = downloadedPaths[i];
+                    Logger.Log($"AssignDownloadedImagesToAlbum: --- Path [{i + 1}]: {path}");
+
+                    // Query for the full row
+                    try
+                    {
+                        var imageRow = ServiceLocator.DataStore.GetImageByPath(path);
+                        if (imageRow != null)
+                        {
+                            Logger.Log($"AssignDownloadedImagesToAlbum:     ✓ FOUND - Id={imageRow.Id}, FileName={imageRow.FileName}, CreatedDate={imageRow.CreatedDate}");
+                        }
+                        else
+                        {
+                            Logger.Log($"AssignDownloadedImagesToAlbum:     ✗ NOT FOUND in Image table");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"AssignDownloadedImagesToAlbum:     ✗ ERROR querying for this path: {ex.Message}");
+                    }
+                }
+                if (downloadedPaths.Count > 10)
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum:   ... and {downloadedPaths.Count - 10} more paths (not shown in detail)");
+                }
+
+                Logger.Log($"AssignDownloadedImagesToAlbum: Image IDs returned from batch query:");
+                for (int i = 0; i < Math.Min(10, imageIds.Count); i++)
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum:   [{i + 1}] Image ID = {imageIds[i]}");
+                }
+                if (imageIds.Count > 10)
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum:   ... and {imageIds.Count - 10} more IDs");
+                }
+                Logger.Log($"AssignDownloadedImagesToAlbum: ========================================");
+
+                if (imageIds.Count == 0)
+                {
+                    Logger.Log("AssignDownloadedImagesToAlbum: WARNING - No matching images found in database");
+                    Logger.Log("AssignDownloadedImagesToAlbum: This usually means:");
+                    Logger.Log("AssignDownloadedImagesToAlbum:   1. The paths in Civitai database don't match paths in Diffusion Toolkit Image table");
+                    Logger.Log("AssignDownloadedImagesToAlbum:   2. The scan didn't pick up the new images yet");
+                    Logger.Log("AssignDownloadedImagesToAlbum:   3. The download folder is not in Diffusion Toolkit's scan paths");
+                    Logger.Log($"AssignDownloadedImagesToAlbum: Sample paths from Civitai database:");
+                    for (int i = 0; i < Math.Min(5, downloadedPaths.Count); i++)
+                    {
+                        Logger.Log($"AssignDownloadedImagesToAlbum:   {i + 1}. {downloadedPaths[i]}");
+                    }
+                    return;
+                }
+
+                // Log matched image IDs
+                Logger.Log($"AssignDownloadedImagesToAlbum: Matched image IDs: {string.Join(", ", imageIds)}");
+
+                // Add images to the album
+                Logger.Log($"AssignDownloadedImagesToAlbum: Adding {imageIds.Count} images to album ID {album.Id}...");
+                var success = ServiceLocator.DataStore.AddImagesToAlbum(album.Id, imageIds);
+
+                if (success)
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum: SUCCESS - Assigned {imageIds.Count} images to album '{albumName}'");
+                }
+                else
+                {
+                    Logger.Log($"AssignDownloadedImagesToAlbum: ERROR - Failed to assign images to album '{albumName}'");
                 }
             }
             catch (Exception ex)
             {
-                Logger.Log($"Error in OnCivitaiScraperCompleted: {ex.Message}");
-                await ServiceLocator.MessageService.Show($"Error processing downloaded images: {ex.Message}", "Error", PopupButtons.OK);
+                Logger.Log($"AssignDownloadedImagesToAlbum: ERROR - {ex.Message}");
+                Logger.Log($"AssignDownloadedImagesToAlbum: Stack trace: {ex.StackTrace}");
             }
+        }
+
+        // Helper class for querying Civitai database
+        private class CivitaiDownloadRecord
+        {
+            public string? local_path { get; set; }
         }
 
         private async Task LaunchCivitaiPipeline()
@@ -1282,33 +1591,59 @@ namespace Diffusion.Toolkit
             try
             {
                 var result = await ServiceLocator.MessageService.Show(
-                    "This will close Diffusion Toolkit to run the Civitai Collections Pipeline.\n\nThe application will automatically reopen when the pipeline is complete.\n\nDo you want to continue?",
+                    "This will run the Civitai Collections Pipeline.\n\nDo you want to continue?",
                     "Launch Civitai Pipeline",
                     PopupButtons.YesNo);
 
                 if (result == PopupResult.Yes)
                 {
-                    var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "Civitai_Collections_Pipeline.bat");
-
-                    if (!File.Exists(scriptPath))
+                    // Check if pipeline repository path is configured
+                    if (string.IsNullOrEmpty(_settings?.CivitaiPipelineRepositoryPath))
                     {
-                        await ServiceLocator.MessageService.Show($"Script not found at: {scriptPath}", "Error", PopupButtons.OK);
+                        await ServiceLocator.MessageService.Show("Civitai Pipeline repository path is not configured.\n\nPlease set it in Settings.", "Configuration Required", PopupButtons.OK);
                         return;
                     }
 
+                    // Find Python executable in virtual environment
+                    var pythonPath = Path.Combine(_settings.CivitaiPipelineRepositoryPath, ".venv1", "Scripts", "python.exe");
+
+                    if (!File.Exists(pythonPath))
+                    {
+                        await ServiceLocator.MessageService.Show($"Python executable not found at: {pythonPath}\n\nPlease ensure the virtual environment is set up correctly.", "Error", PopupButtons.OK);
+                        return;
+                    }
+
+                    var pipelineScript = Path.Combine(_settings.CivitaiPipelineRepositoryPath, "run_pipeline.py");
+
+                    if (!File.Exists(pipelineScript))
+                    {
+                        await ServiceLocator.MessageService.Show($"run_pipeline.py not found at: {pipelineScript}\n\nPlease verify the pipeline repository path in Settings.", "Error", PopupButtons.OK);
+                        return;
+                    }
+
+                    Logger.Log("LaunchCivitaiPipeline: Starting pipeline...");
+                    Logger.Log($"LaunchCivitaiPipeline: Python path: {pythonPath}");
+                    Logger.Log($"LaunchCivitaiPipeline: Pipeline script: {pipelineScript}");
+
+                    // Launch Python process with admin rights
                     var processInfo = new ProcessStartInfo()
                     {
-                        FileName = scriptPath,
+                        FileName = pythonPath,
+                        Arguments = "run_pipeline.py",
+                        WorkingDirectory = _settings.CivitaiPipelineRepositoryPath,
                         UseShellExecute = true,
-                        WorkingDirectory = Path.GetDirectoryName(scriptPath),
                         Verb = "runas" // Run as administrator
                     };
 
                     Process.Start(processInfo);
+                    Logger.Log("LaunchCivitaiPipeline: Pipeline process started");
+
+                    await ServiceLocator.MessageService.Show("Pipeline launched successfully!", "Success", PopupButtons.OK);
                 }
             }
             catch (Exception ex)
             {
+                Logger.Log($"LaunchCivitaiPipeline: ERROR - {ex.Message}");
                 await ServiceLocator.MessageService.Show($"Error launching pipeline: {ex.Message}", "Error", PopupButtons.OK);
             }
         }

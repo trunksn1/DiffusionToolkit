@@ -100,22 +100,25 @@ namespace Diffusion.Database
         }
 
 
-        //public Album GetAlbumByName(string name)
-        //{
-        //    using var db = OpenConnection();
+        public Album? GetAlbumByName(string name)
+        {
+            using var db = OpenConnection();
 
-        //    var query = $"SELECT * FROM {nameof(Album)} WHERE Name = @Name LIMIT 1";
+            var query = $"SELECT * FROM {nameof(Album)} WHERE Name = @Name LIMIT 1";
 
-        //    var command = db.CreateCommand(query);
+            var command = db.CreateCommand(query);
 
-        //    command.Bind("@Name", name);
+            command.Bind("@Name", name);
 
-        //    var album = command.ExecuteQuery<Album>();
+            var album = command.ExecuteQuery<Album>();
 
-        //    db.Close();
+            db.Close();
 
-        //    return album[0];
-        //}
+            if (album.Count < 1)
+                return null;
+
+            return album[0];
+        }
 
         public Album CreateAlbum(Album album)
         {

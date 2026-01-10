@@ -1,26 +1,42 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Diffusion.Database;
 using Diffusion.Toolkit.Models;
+using Diffusion.Toolkit.Classes;
+using Diffusion.Toolkit.Services;
 
 namespace Diffusion.Toolkit
 {
-    public partial class CivitaiAlbumSelectionWindow : BorderlessWindow
+    public partial class CivitaiAlbumSelectionWindow : Window
     {
         public string? SelectedAlbumName { get; private set; }
         public bool RememberChoice { get; private set; }
+        private ObservableCollection<AlbumModel> _albums;
 
-        public CivitaiAlbumSelectionWindow(ObservableCollection<AlbumModel> albums, int imageCount)
+        public CivitaiAlbumSelectionWindow(ObservableCollection<AlbumModel> albums)
         {
-            InitializeComponent();
+            try
+            {
+                InitializeComponent();
 
-            ImageCountText.Text = $"{imageCount} new image(s) downloaded.";
-            AlbumsListBox.ItemsSource = albums;
+                _albums = albums ?? new ObservableCollection<AlbumModel>();
+
+                if (AlbumsListBox != null)
+                {
+                    AlbumsListBox.ItemsSource = _albums;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing album selection window: {ex.Message}\n\nStack trace: {ex.StackTrace}", "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                throw;
+            }
         }
 
-        private void OkButton_Click(object sender, RoutedEventArgs e)
+        private async void OkButton_Click(object sender, RoutedEventArgs e)
         {
             // Check which option was selected
             if (NewAlbumRadioButton.IsChecked == true)
@@ -30,7 +46,33 @@ namespace Diffusion.Toolkit
                     MessageBox.Show("Please enter a name for the new album.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-                SelectedAlbumName = NewAlbumTextBox.Text.Trim();
+
+                var newAlbumName = NewAlbumTextBox.Text.Trim();
+
+                // Check if album already exists
+                if (_albums.Any(a => a.Name.Equals(newAlbumName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    MessageBox.Show($"An album named '{newAlbumName}' already exists. Please choose a different name.", "Album Exists", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Create the new album in the database
+                try
+                {
+                    var newAlbum = new Diffusion.Database.Models.Album
+                    {
+                        Name = newAlbumName,
+                        LastUpdated = DateTime.Now
+                    };
+
+                    ServiceLocator.DataStore.CreateAlbum(newAlbum);
+                    SelectedAlbumName = newAlbumName;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error creating album: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
             }
             else if (SkipRadioButton.IsChecked != true)
             {
