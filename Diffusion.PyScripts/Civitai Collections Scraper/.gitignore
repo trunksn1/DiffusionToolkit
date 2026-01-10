@@ -1,0 +1,40 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+
+# Database files
+*.db
+*.db-journal
+
+# User-specific config (keep template)
+# config.yaml
+
+# Debug logs
+log for missing civid.txt
+
+# Test downloads
+TestDownloads/
+
+# Cookie files (contain sensitive session data)
+*_cookies.txt
+civitai.com_cookies.txt
+
+# Utility scripts
+check_chrome_profile.py
+
+# User preferences file (user-specific, should not be committed)
+user_preferences.yaml
+
+# IDE folders
+.idea/
+.vscode/
+
+# Virtual environments
+.venv/
+venv/
+env/

@@ -1,0 +1,86 @@
+# CivitAI Downloader Configuration
+
+# Path settings
+paths:
+  # Where to save downloaded images
+  downloads: "E:/BACKUP D Disperato/ARCHIVIO/SD Outputs/__My Collections"
+
+  # Where to check for existing files (to avoid re-downloading)
+  # Can be a list of paths - the script will check ALL of them
+  # IMPORTANT: Should include your downloads directory to avoid re-downloading!
+  check_paths:
+    - "E:/BACKUP D Disperato/ARCHIVIO/SD Outputs/__My Collections"
+    # You can add additional directories to check if you have files elsewhere
+    - "E:/BACKUP D Disperato/ARCHIVIO/SD Outputs/EMPTY"
+
+  # State database location (tracks what's been downloaded)
+  state_db: "./civitai_state.db"
+  # DiffusionToolkit database for deduplication
+  diffusion_toolkit_db: "C:/Users/trunk/AppData/Roaming/DiffusionToolkit/diffusion-toolkit.db"
+
+# Download settings
+download:
+  # Number of concurrent downloads (IMPORTANT: Keep low to avoid rate limiting!)
+  # Recommended: 2-3 for regular use, 1 if you keep getting blocked
+  max_workers: 3
+  # Timeout for downloads in seconds
+  timeout: 60
+  # Retry failed downloads this many times
+  max_retries: 3
+  # Wait time between retries (seconds)
+  retry_delay: 5
+  # Delay between successful downloads (seconds, helps avoid rate limiting)
+  # Recommended: 2-3 seconds to avoid HTTP 429 errors
+  delay_between_downloads: 2
+
+# CivitAI API settings
+api:
+  # Base URL for image downloads
+  image_base_url: "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
+  # API base URL
+  api_base_url: "https://civitai.com/api"
+  # tRPC endpoint
+  trpc_url: "https://civitai.com/api/trpc"
+  # Items per page when fetching collections
+  page_size: 100
+  # OPTIMIZATION: Limit how many pages to fetch per collection (0 = unlimited, N = only fetch first N pages)
+  # Useful if you only want the newest images and have already downloaded most of a collection
+  # Example: max_pages_per_collection: 2 means only check the first ~200 newest images
+  max_pages_per_collection: 1  # 0 = fetch all pages (default behavior)
+
+# Chrome settings for cookie extraction
+chrome:
+  # Chrome profile path (for cookie extraction)
+  profile_path: "./Profilo Pezzotto"
+  # Which browser to extract cookies from
+  browser: "chrome"  # Options: chrome, firefox, edge
+
+# Storage settings
+storage:
+  # Use content-addressable storage (hash-based filenames)
+  # If false, uses original filenames with CIV_ID suffix
+  use_content_addressing: false
+  # Organize files in subdirectories by collection name
+  organize_by_collection: true
+  # Supported image extensions
+  supported_extensions: [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"]
+
+# Logging settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  # Log file location
+  file: "./civitai_downloader.log"
+  # Also log to console
+  console: true
+
+# Collections to sync (can also be specified via CLI)
+collections:
+  - name: "Josè"
+    id: 1107870
+  - name: "Concepts--Styles"
+    id: 3157498
+  - name: "--FLUX--"
+    id: 3737665
+  - name: "--WAIFU-2026--"
+    id: 13563510

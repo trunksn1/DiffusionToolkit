@@ -1,0 +1,23 @@
+# CivitAI Collection Downloader v04 - Requirements
+
+# Core dependencies
+requests>=2.31.0
+PyYAML>=6.0.1
+
+# Cookie extraction for authentication
+browser-cookie3>=0.19.1
+
+# HTTP library with connection pooling
+urllib3>=2.0.0
+
+# Python 3.8+ compatibility
+typing-extensions>=4.7.0; python_version < "3.10"
+
+# Optional but recommended
+# For better logging
+colorlog>=6.7.0
+
+# Development dependencies (optional)
+# pytest>=7.4.0
+# black>=23.7.0
+# mypy>=1.5.0

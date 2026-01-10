@@ -1167,6 +1167,22 @@ namespace Diffusion.Toolkit
         private string? _selectedAlbumForDownload = null;
         private string _downloadStartTime = "";
 
+        private string GetCivitaiScriptsPath()
+        {
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Diffusion.PyScripts", "Civitai Collections Scraper");
+        }
+
+        private string GetCivitaiDatabasePath()
+        {
+            var appDataPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "DiffusionToolkit",
+                "Civitai"
+            );
+            Directory.CreateDirectory(appDataPath); // Ensure directory exists
+            return Path.Combine(appDataPath, "civitai_state.db");
+        }
+
         private async void LaunchCivitaiScraper()
         {
             try
@@ -1253,15 +1269,18 @@ namespace Diffusion.Toolkit
                 }
 
                 // Now launch Python script directly
-                // Check if Civitai scraper repository path is configured
-                if (string.IsNullOrEmpty(_settings.CivitaiScraperRepositoryPath))
+                // Get internal script path
+                var scriptsBasePath = GetCivitaiScriptsPath();
+                Logger.Log($"LaunchCivitaiScraper: Scripts base path: {scriptsBasePath}");
+
+                if (!Directory.Exists(scriptsBasePath))
                 {
-                    MessageBox.Show(this, "Civitai Collections Scraper repository path is not configured.\n\nPlease set it in Settings.", "Configuration Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show(this, $"Civitai Collections Scraper scripts not found at:\n{scriptsBasePath}\n\nPlease ensure the Diffusion.PyScripts folder is present in the application directory.", "Scripts Missing", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
                 // Find Python executable in virtual environment
-                var pythonPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, ".venv", "Scripts", "python.exe");
+                var pythonPath = Path.Combine(scriptsBasePath, ".venv", "Scripts", "python.exe");
 
                 if (!File.Exists(pythonPath))
                 {
@@ -1269,12 +1288,34 @@ namespace Diffusion.Toolkit
                     return;
                 }
 
-                var mainPyPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, "main.py");
+                var mainPyPath = Path.Combine(scriptsBasePath, "main.py");
 
                 if (!File.Exists(mainPyPath))
                 {
-                    MessageBox.Show(this, $"main.py not found at: {mainPyPath}\n\nPlease verify the Civitai Collections Scraper repository path in Settings.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(this, $"main.py not found at: {mainPyPath}\n\nPlease verify the Civitai Collections Scraper installation.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
+                }
+
+                // Get database path and handle migration from old location
+                var civitaiDbPath = GetCivitaiDatabasePath();
+
+                // Migrate database from old location if it exists
+                if (!string.IsNullOrEmpty(_settings?.CivitaiScraperRepositoryPath))
+                {
+                    var oldDbPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, "civitai_state.db");
+                    if (File.Exists(oldDbPath) && !File.Exists(civitaiDbPath))
+                    {
+                        Logger.Log($"LaunchCivitaiScraper: Migrating database from {oldDbPath} to {civitaiDbPath}");
+                        try
+                        {
+                            File.Copy(oldDbPath, civitaiDbPath);
+                            Logger.Log("LaunchCivitaiScraper: Database migration successful");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log($"LaunchCivitaiScraper: Database migration failed - {ex.Message}");
+                        }
+                    }
                 }
 
                 // Record the current time before starting download
@@ -1282,18 +1323,21 @@ namespace Diffusion.Toolkit
                 _downloadStartTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 Logger.Log($"LaunchCivitaiScraper: Recording download start time = {_downloadStartTime}");
 
-                var civitaiDbPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, "civitai_state.db");
-
                 Logger.Log($"LaunchCivitaiScraper: Python path: {pythonPath}");
                 Logger.Log($"LaunchCivitaiScraper: main.py path: {mainPyPath}");
-                Logger.Log($"LaunchCivitaiScraper: Working directory: {_settings.CivitaiScraperRepositoryPath}");
+                Logger.Log($"LaunchCivitaiScraper: Database path: {civitaiDbPath}");
+                Logger.Log($"LaunchCivitaiScraper: Working directory: {scriptsBasePath}");
 
-                // Launch Python process directly
+                // Record database modification time before launching (for validation)
+                DateTime dbModifiedBefore = File.Exists(civitaiDbPath) ? File.GetLastWriteTime(civitaiDbPath) : DateTime.MinValue;
+                Logger.Log($"LaunchCivitaiScraper: Database last modified before: {dbModifiedBefore}");
+
+                // Launch Python process directly with database path override
                 var processInfo = new ProcessStartInfo()
                 {
                     FileName = pythonPath,
-                    Arguments = "main.py sync",
-                    WorkingDirectory = _settings.CivitaiScraperRepositoryPath,
+                    Arguments = $"main.py --db-path \"{civitaiDbPath}\" sync",
+                    WorkingDirectory = scriptsBasePath,
                     UseShellExecute = true,  // Show console window
                     CreateNoWindow = false
                 };
@@ -1317,6 +1361,35 @@ namespace Diffusion.Toolkit
                     process.WaitForExit();
                     Logger.Log($"LaunchCivitaiScraper: Process exited with code {process.ExitCode}");
                 });
+
+                // Validate database was updated by Python script
+                Logger.Log("LaunchCivitaiScraper: Validating database was updated...");
+                if (File.Exists(civitaiDbPath))
+                {
+                    DateTime dbModifiedAfter = File.GetLastWriteTime(civitaiDbPath);
+                    Logger.Log($"LaunchCivitaiScraper: Database last modified after: {dbModifiedAfter}");
+
+                    if (dbModifiedAfter <= dbModifiedBefore)
+                    {
+                        Logger.Log("LaunchCivitaiScraper: WARNING - Database was NOT updated by Python script!");
+                        Logger.Log($"LaunchCivitaiScraper: Before: {dbModifiedBefore}, After: {dbModifiedAfter}");
+                        MessageBox.Show(this,
+                            "Warning: The database was not updated by the Python script.\n\n" +
+                            "This may indicate the script did not run correctly or found no new images to download.\n\n" +
+                            "Check the Python console output for details.",
+                            "Database Not Updated",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
+                    else
+                    {
+                        Logger.Log($"LaunchCivitaiScraper: SUCCESS - Database was updated (modified {(dbModifiedAfter - dbModifiedBefore).TotalSeconds:F1} seconds ago)");
+                    }
+                }
+                else
+                {
+                    Logger.Log($"LaunchCivitaiScraper: ERROR - Database does not exist at {civitaiDbPath}");
+                }
 
                 // Call post-completion handler
                 Logger.Log("LaunchCivitaiScraper: Process completed, calling OnCivitaiScraperCompleted...");
@@ -1427,16 +1500,7 @@ namespace Diffusion.Toolkit
                 Logger.Log($"AssignDownloadedImagesToAlbum: Found album with ID {album.Id}");
 
                 // Query the Civitai scraper's database for recently downloaded files
-                Logger.Log($"AssignDownloadedImagesToAlbum: Checking repository path...");
-                Logger.Log($"AssignDownloadedImagesToAlbum: _settings?.CivitaiScraperRepositoryPath = '{_settings?.CivitaiScraperRepositoryPath}'");
-
-                if (string.IsNullOrEmpty(_settings?.CivitaiScraperRepositoryPath))
-                {
-                    Logger.Log("AssignDownloadedImagesToAlbum: ERROR - Civitai scraper repository path not configured");
-                    return;
-                }
-
-                var civitaiDbPath = Path.Combine(_settings.CivitaiScraperRepositoryPath, "civitai_state.db");
+                var civitaiDbPath = GetCivitaiDatabasePath();
                 Logger.Log($"AssignDownloadedImagesToAlbum: Civitai database path = '{civitaiDbPath}'");
                 Logger.Log($"AssignDownloadedImagesToAlbum: Database exists = {File.Exists(civitaiDbPath)}");
 

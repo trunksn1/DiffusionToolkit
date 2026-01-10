@@ -467,6 +467,8 @@ public class Settings : SettingsContainer, IScanOptions
     }
 
     // Civitai Scraper Settings
+    // NOTE: This setting is kept for migration purposes only (not shown in UI)
+    // Old users may have this in their config file, and we use it to migrate their database
     public string? CivitaiScraperRepositoryPath
     {
         get;

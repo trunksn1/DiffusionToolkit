@@ -193,18 +193,6 @@
                         <Label Content="Civitai Scraper" FontWeight="Bold"></Label>
 
                         <StackPanel Orientation="Vertical" Margin="0,10,0,0">
-                            <Label Content="Civitai Collections Scraper Repository Path:"></Label>
-                            <Grid Margin="0,5,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="120"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Height="26" VerticalContentAlignment="Center" Text="{Binding CivitaiScraperRepositoryPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"></TextBox>
-                                <Button Height="26" Grid.Column="1" Click="BrowseCivitaiScraperPath_OnClick" Content="Browse"></Button>
-                            </Grid>
-                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,15" TextWrapping="Wrap"
-                                       Text="Path to the Civitai Collections Scraper repository folder (e.g., E:\Clouding\Dropbox\INFORMATICA\GitHub\Civitai Collections Scraper)"></TextBlock>
-
                             <Label Content="Civitai Pipeline Repository Path:"></Label>
                             <Grid Margin="0,5,0,10">
                                 <Grid.ColumnDefinitions>
