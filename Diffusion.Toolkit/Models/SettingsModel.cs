@@ -276,6 +276,17 @@ public class SettingsModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public int CivitaiMaxPagesPerCollection
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string? TokenAnalyzerPath
+    {
+        get;
+        set => SetField(ref field, value);
+    }
 
     public override bool IsDirty => _isDirty;
 

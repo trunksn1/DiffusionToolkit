@@ -347,6 +347,12 @@ public class ThumbnailViewModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public ICommand SendToTokenAnalyzerCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public int ThumbnailSize
     {
         get => _thumbnailSize;

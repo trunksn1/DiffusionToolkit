@@ -492,6 +492,19 @@ public class Settings : SettingsContainer, IScanOptions
         get;
         set => UpdateValue(ref field, value);
     }
+
+    public int CivitaiMaxPagesPerCollection
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    } = 5; // Default: check first 5 pages (~500 images)
+
+    // Token Analyzer Integration
+    public string? TokenAnalyzerPath
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
 }
 
 public class PreviewWindowState

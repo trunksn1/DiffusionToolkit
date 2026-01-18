@@ -76,6 +76,7 @@ namespace Diffusion.Toolkit.Controls
             Model.CopyCommand = new RelayCommand<object>(o => CopySelected());
             Model.MoveCommand = new RelayCommand<object>(o => MoveSelected());
             Model.PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
+            Model.SendToTokenAnalyzerCommand = new RelayCommand<object>(o => SendToTokenAnalyzer());
             Model.RescanCommand = new AsyncCommand<object>(o => RescanSelected());
             Model.RescanFolderCommand = new AsyncCommand<object>(o => RescanFolder(true));
             Model.ScanFolderCommand = new AsyncCommand<object>(o => RescanFolder(false));
@@ -166,6 +167,15 @@ namespace Diffusion.Toolkit.Controls
         {
             var imageEntries = ThumbnailListView.SelectedItems.Cast<ImageEntry>().ToList();
             ServiceLocator.CivitaiPostService.PostImages(imageEntries);
+        }
+
+        private async void SendToTokenAnalyzer()
+        {
+            var imageEntry = ThumbnailListView.SelectedItems.Cast<ImageEntry>().FirstOrDefault();
+            if (imageEntry != null && !string.IsNullOrEmpty(imageEntry.Path))
+            {
+                await ServiceLocator.TokenAnalyzerService.SendToTokenAnalyzer(imageEntry.Path);
+            }
         }
 
         private void ModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)

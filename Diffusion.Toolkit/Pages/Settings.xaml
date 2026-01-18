@@ -221,6 +221,39 @@
                                     HorizontalAlignment="Left"
                                     Click="ClearCivitaiDefaultAlbum_Click"
                                     Margin="0,5,0,0"/>
+
+                            <Label Content="Max Pages Per Collection:"
+                                   Margin="0,15,0,0"></Label>
+                            <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                <TextBox Width="60"
+                                         Height="26"
+                                         Text="{Binding CivitaiMaxPagesPerCollection, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Number of pages to fetch per collection. 0 = all pages (unlimited), N = only fetch first N pages. Each page contains ~100 images."
+                                         VerticalContentAlignment="Center"
+                                         Padding="5,0"/>
+                                <TextBlock Text="(0 = all pages)"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0"
+                                           Foreground="{DynamicResource MahApps.Brushes.Gray1}"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Separator Margin="0,20,0,10"/>
+
+                        <Label Content="Token Analyzer Integration" FontWeight="Bold"></Label>
+
+                        <StackPanel Orientation="Vertical" Margin="0,10,0,0">
+                            <Label Content="Token Analyzer Path:"></Label>
+                            <Grid Margin="0,5,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="120"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Height="26" VerticalContentAlignment="Center" Text="{Binding TokenAnalyzerPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"></TextBox>
+                                <Button Height="26" Grid.Column="1" Click="BrowseTokenAnalyzerPath_OnClick" Content="Browse"></Button>
+                            </Grid>
+                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,15" TextWrapping="Wrap"
+                                       Text="Path to Token Analyzer launcher (.bat, .py, or .exe). Right-click an image and select 'Send to Token Analyzer' to analyze prompts."></TextBlock>
                         </StackPanel>
 
                     </StackPanel>

@@ -141,6 +141,7 @@ namespace Diffusion.Toolkit.Controls
 
         public ICommand CopyPathCommand { get; set; }
         public ICommand PostToCivitaiCommand { get; set; }
+        public ICommand SendToTokenAnalyzerCommand { get; set; }
 
 
         private ScrollDragger? _scrollDragger = null;
@@ -159,6 +160,7 @@ namespace Diffusion.Toolkit.Controls
 
             CopyPathCommand = new RelayCommand<object>(ServiceLocator.ContextMenuService.CopyPath);
             PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
+            SendToTokenAnalyzerCommand = new RelayCommand<object>(o => SendToTokenAnalyzer());
 
             if (ServiceLocator.MainModel != null)
             {
@@ -192,6 +194,13 @@ namespace Diffusion.Toolkit.Controls
             };
 
             ServiceLocator.CivitaiPostService.PostImage(imageEntry);
+        }
+
+        private async void SendToTokenAnalyzer()
+        {
+            if (Image == null || string.IsNullOrEmpty(Image.Path)) return;
+
+            await ServiceLocator.TokenAnalyzerService.SendToTokenAnalyzer(Image.Path);
         }
 
         private void FitToPreview()

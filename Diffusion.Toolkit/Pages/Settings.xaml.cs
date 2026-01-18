@@ -101,7 +101,11 @@ namespace Diffusion.Toolkit.Pages
 
             // Civitai settings
             _model.CivitaiAlwaysPromptForAlbum = _settings.CivitaiAlwaysPromptForAlbum;
+            _model.CivitaiMaxPagesPerCollection = _settings.CivitaiMaxPagesPerCollection;
             LoadCivitaiAlbumDropdown();
+
+            // Token Analyzer settings
+            _model.TokenAnalyzerPath = _settings.TokenAnalyzerPath;
 
             _model.StoreMetadata = _settings.StoreMetadata;
             _model.StoreWorkflow = _settings.StoreWorkflow;
@@ -406,8 +410,11 @@ namespace Diffusion.Toolkit.Pages
 
                 // Civitai settings
                 _settings.CivitaiAlwaysPromptForAlbum = _model.CivitaiAlwaysPromptForAlbum;
+                _settings.CivitaiMaxPagesPerCollection = _model.CivitaiMaxPagesPerCollection;
                 // CivitaiDefaultAlbum is saved when the user selects from dropdown or clicks Clear
 
+                // Token Analyzer settings
+                _settings.TokenAnalyzerPath = _model.TokenAnalyzerPath;
             }
         }
 
@@ -460,9 +467,18 @@ namespace Diffusion.Toolkit.Pages
             }
         }
 
-
+        private void BrowseTokenAnalyzerPath_OnClick(object sender, RoutedEventArgs e)
+        {
+            using var dialog = new CommonOpenFileDialog();
+            dialog.Title = "Select Token Analyzer Launcher";
+            dialog.Filters.Add(new CommonFileDialogFilter("Batch files", "*.bat;*.cmd"));
+            dialog.Filters.Add(new CommonFileDialogFilter("Python scripts", "*.py"));
+            dialog.Filters.Add(new CommonFileDialogFilter("Executable files", "*.exe"));
+            dialog.Filters.Add(new CommonFileDialogFilter("All files", "*.*"));
+            if (dialog.ShowDialog(this._window) == CommonFileDialogResult.Ok)
+            {
+                _model.TokenAnalyzerPath = dialog.FileName;
+            }
+        }
     }
-
-
-
 }
