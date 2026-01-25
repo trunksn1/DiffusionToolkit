@@ -406,6 +406,8 @@ Examples:
                         help='Path to config file (default: config.yaml)')
     parser.add_argument('--db-path', type=str,
                         help='Override database path (used by Diffusion Toolkit integration)')
+    parser.add_argument('--max-pages', type=int, default=None,
+                        help='Max pages per collection (0=unlimited, used by Diffusion Toolkit integration)')
 
     # Subcommands
     subparsers = parser.add_subparsers(dest='command', help='Command to run')
@@ -452,6 +454,11 @@ Examples:
     if args.db_path:
         print(f"Using database path override: {args.db_path}")
         config['paths']['state_db'] = args.db_path
+
+    # Override max pages if provided (for Diffusion Toolkit integration)
+    if args.max_pages is not None:
+        print(f"Using max pages override: {args.max_pages}")
+        config['api']['max_pages_per_collection'] = args.max_pages
 
     # Setup logging
     setup_logging(config)

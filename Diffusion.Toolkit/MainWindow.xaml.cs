@@ -1336,7 +1336,7 @@ namespace Diffusion.Toolkit
                 var processInfo = new ProcessStartInfo()
                 {
                     FileName = pythonPath,
-                    Arguments = $"main.py --db-path \"{civitaiDbPath}\" sync",
+                    Arguments = $"main.py --db-path \"{civitaiDbPath}\" --max-pages {_settings.CivitaiMaxPagesPerCollection} sync",
                     WorkingDirectory = scriptsBasePath,
                     UseShellExecute = true,  // Show console window
                     CreateNoWindow = false
@@ -1655,7 +1655,10 @@ namespace Diffusion.Toolkit
             try
             {
                 var result = await ServiceLocator.MessageService.Show(
-                    "This will run the Civitai Collections Pipeline.\n\nDo you want to continue?",
+                    "This will run the Civitai Collections Pipeline.\n\n" +
+                    "Diffusion Toolkit will close immediately and the pipeline will run.\n" +
+                    "The application will automatically reopen when the pipeline finishes.\n\n" +
+                    "Do you want to continue?",
                     "Launch Civitai Pipeline",
                     PopupButtons.YesNo);
 
@@ -1700,9 +1703,10 @@ namespace Diffusion.Toolkit
                     };
 
                     Process.Start(processInfo);
-                    Logger.Log("LaunchCivitaiPipeline: Pipeline process started");
+                    Logger.Log("LaunchCivitaiPipeline: Pipeline process started, closing application");
 
-                    await ServiceLocator.MessageService.Show("Pipeline launched successfully!", "Success", PopupButtons.OK);
+                    // Close the application immediately so pipeline can run
+                    Application.Current.Shutdown();
                 }
             }
             catch (Exception ex)

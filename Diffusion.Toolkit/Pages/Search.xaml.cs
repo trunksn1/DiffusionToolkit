@@ -1178,7 +1178,7 @@ namespace Diffusion.Toolkit.Pages
                 if (ServiceLocator.CivitAiExtensionDataStore?.IsAvailable == true)
                 {
                     var civitaiData = ServiceLocator.CivitAiExtensionDataStore.GetByPath(path);
-                    if (civitaiData != null && civitaiData.HasData)
+                    if (civitaiData != null)
                     {
                         imageViewModel.HasCivitaiData = true;
                         imageViewModel.CivitaiLoraRiforgiati = civitaiData.LoraRiforgiati;

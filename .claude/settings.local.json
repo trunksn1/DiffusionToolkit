@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:feedback.civitai.com)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet --list-sdks:*)",
+      "Bash(git add:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(cat:*)",
+      "Bash(test:*)",
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(.venvScriptspython.exe:*)",
+      "Bash(.venv/Scripts/python.exe:*)"
+    ]
+  }
+}

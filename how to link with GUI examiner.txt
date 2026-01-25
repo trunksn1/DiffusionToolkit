@@ -1,0 +1,133 @@
+Here's a guide for integrating with the Token Analyzer:
+
+  ---                                                                                                                     Integrating with Token Analyzer - Developer Guide
+                                                                                                                          Overview
+
+  Token Analyzer accepts image paths from external applications via named local sockets (Windows named pipes / Unix
+  domain sockets). This allows image viewers to send an image path for automatic prompt analysis.
+
+  ---
+  Connection Details
+  ┌─────────────┬─────────────────────────────────────────┐
+  │  Property   │                  Value                  │
+  ├─────────────┼─────────────────────────────────────────┤
+  │ Server Name │ CivTokenAnalyzerInstance                │
+  ├─────────────┼─────────────────────────────────────────┤
+  │ Protocol    │ Qt Local Socket (named pipe on Windows) │
+  ├─────────────┼─────────────────────────────────────────┤
+  │ Data Format │ UTF-8 encoded string (the image path)   │
+  ├─────────────┼─────────────────────────────────────────┤
+  │ Timeout     │ 1000ms recommended                      │
+  └─────────────┴─────────────────────────────────────────┘
+  ---
+  Behavior
+
+  1. If Token Analyzer is running: Your path is received, the window comes to front, and analysis starts automatically
+  2. If Token Analyzer is NOT running: Connection fails - you should launch it with the path as argument instead
+
+  ---
+  Python Example (PyQt6)
+
+  from PyQt6.QtNetwork import QLocalSocket
+  from PyQt6.QtCore import QCoreApplication
+  import sys
+  import subprocess
+
+  SERVER_NAME = "CivTokenAnalyzerInstance"
+  TOKEN_ANALYZER_PATH = r"C:\path\to\run_modern_gui.py"
+
+  def send_image_to_token_analyzer(image_path: str) -> bool:
+      """Send image path to Token Analyzer. Returns True if successful."""
+      # Need QCoreApplication for Qt networking
+      app = QCoreApplication.instance() or QCoreApplication(sys.argv)
+
+      socket = QLocalSocket()
+      socket.connectToServer(SERVER_NAME)
+
+      if socket.waitForConnected(1000):
+          # Connected - send the path
+          socket.write(image_path.encode('utf-8'))
+          socket.waitForBytesWritten(1000)
+          socket.disconnectFromServer()
+          return True
+      else:
+          # Not running - launch it with the image path
+          subprocess.Popen(["python", TOKEN_ANALYZER_PATH, image_path])
+          return False
+
+  # Usage
+  send_image_to_token_analyzer(r"C:\images\my_image.png")
+
+  ---
+  Python Example (No Qt - Windows only)
+
+  import subprocess
+
+  SERVER_NAME = "CivTokenAnalyzerInstance"
+  TOKEN_ANALYZER_PATH = r"C:\path\to\run_modern_gui.py"
+
+  def send_image_to_token_analyzer(image_path: str) -> bool:
+      """Send image path via Windows named pipe."""
+      pipe_name = f"\\\\.\\pipe\\{SERVER_NAME}"
+
+      try:
+          # Try to connect to existing instance
+          with open(pipe_name, 'wb') as pipe:
+              pipe.write(image_path.encode('utf-8'))
+          return True
+      except FileNotFoundError:
+          # Not running - launch it
+          subprocess.Popen(["python", TOKEN_ANALYZER_PATH, image_path])
+          return False
+
+  # Usage
+  send_image_to_token_analyzer(r"C:\images\my_image.png")
+
+  ---
+  C# Example (Windows)
+
+  using System.IO.Pipes;
+  using System.Text;
+  using System.Diagnostics;
+
+  public static class TokenAnalyzerBridge
+  {
+      private const string ServerName = "CivTokenAnalyzerInstance";
+      private const string TokenAnalyzerPath = @"C:\path\to\run_modern_gui.py";
+
+      public static bool SendImagePath(string imagePath)
+      {
+          try
+          {
+              using var client = new NamedPipeClientStream(".", ServerName, PipeDirection.Out);
+              client.Connect(1000); // 1 second timeout
+
+              byte[] data = Encoding.UTF8.GetBytes(imagePath);
+              client.Write(data, 0, data.Length);
+              return true;
+          }
+          catch (TimeoutException)
+          {
+              // Not running - launch it
+              Process.Start("python", $"\"{TokenAnalyzerPath}\" \"{imagePath}\"");
+              return false;
+          }
+      }
+  }
+
+  ---
+  Command Line (Simplest)
+
+  If you just want to launch/communicate without writing code:
+
+  :: This handles both cases automatically
+  python run_modern_gui.py "C:\path\to\image.png"
+
+  The launcher script already checks for a running instance and sends the path if one exists.
+
+  ---
+  Notes
+
+  - Paths can be absolute or relative (absolute recommended)
+  - The Token Analyzer window will automatically come to foreground when receiving a path
+  - Analysis starts immediately after receiving the path
