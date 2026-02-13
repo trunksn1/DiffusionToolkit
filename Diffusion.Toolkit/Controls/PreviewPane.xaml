@@ -123,6 +123,11 @@
                     <MenuItem Header="Copy Path" Command="{Binding CopyPathCommand}"></MenuItem>
                     <MenuItem Header="Post to CivitAI" Command="{Binding PostToCivitaiCommand}"></MenuItem>
                     <MenuItem Header="Send to Token Analyzer" Command="{Binding SendToTokenAnalyzerCommand}"></MenuItem>
+                    <MenuItem Header="Open in ComfyUI" Command="{Binding OpenInComfyUICommand}">
+                        <MenuItem.Icon>
+                            <fa:ImageAwesome Icon="Sitemap" Foreground="{DynamicResource ForegroundBrush}"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </ContextMenu>
 
                 <!--Stretch="{Binding MainModel.FitToPreview, Converter={StaticResource stretch}, RelativeSource={RelativeSource  FindAncestor, AncestorType={x:Type UserControl}}}"-->
@@ -217,10 +222,31 @@
                 <ColumnDefinition Width="32"/>
                 <ColumnDefinition/>
             </Grid.ColumnDefinitions>
-            <!-- Token Analyzer Button - Top Right -->
+            <!-- ComfyUI Button - Top Right -->
             <Button Grid.Row="0" Grid.Column="4"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,10,10,0"
+                    Style="{StaticResource StaticButton}"
+                    ToolTip="Open in ComfyUI"
+                    Command="{Binding OpenInComfyUICommand, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type UserControl}}}">
+                <fa:ImageAwesome Height="18" Icon="Sitemap" Foreground="{DynamicResource ForegroundBrush}">
+                    <fa:ImageAwesome.Resources>
+                        <Style TargetType="fa:ImageAwesome">
+                            <Setter Property="Opacity" Value="0.5"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Opacity" Value="1.0"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </fa:ImageAwesome.Resources>
+                </fa:ImageAwesome>
+            </Button>
+
+            <!-- Token Analyzer Button - Top Right -->
+            <Button Grid.Row="0" Grid.Column="4"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,40,10,0"
                     Style="{StaticResource StaticButton}"
                     ToolTip="Send to Token Analyzer"
                     Command="{Binding SendToTokenAnalyzerCommand, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type UserControl}}}">

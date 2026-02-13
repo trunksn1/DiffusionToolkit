@@ -256,6 +256,39 @@
                                        Text="Path to Token Analyzer launcher (.bat, .py, or .exe). Right-click an image and select 'Send to Token Analyzer' to analyze prompts."></TextBlock>
                         </StackPanel>
 
+                        <Separator Margin="0,20,0,10"/>
+
+                        <Label Content="ComfyUI Integration" FontWeight="Bold"></Label>
+
+                        <StackPanel Orientation="Vertical" Margin="0,10,0,0">
+                            <Label Content="ComfyUI Launcher Path:"></Label>
+                            <Grid Margin="0,5,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="120"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Height="26" VerticalContentAlignment="Center" Text="{Binding ComfyUILauncherPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"></TextBox>
+                                <Button Height="26" Grid.Column="1" Click="BrowseComfyUILauncher_OnClick" Content="Browse"></Button>
+                            </Grid>
+                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,10" TextWrapping="Wrap"
+                                       Text="Path to your ComfyUI launcher. Examples: run_nvidia_gpu.bat, python.exe, or ComfyUI.exe (for portable version)."></TextBlock>
+
+                            <Label Content="Launcher Arguments (Optional):"></Label>
+                            <TextBox Height="26" VerticalContentAlignment="Center" Text="{Binding ComfyUILauncherArgs, UpdateSourceTrigger=PropertyChanged}" Margin="0,5,0,10"></TextBox>
+                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,10" TextWrapping="Wrap"
+                                       Text="Optional custom arguments (e.g., --listen 0.0.0.0 --port 8188). Leave blank for defaults."></TextBlock>
+
+                            <Label Content="Server URL:"></Label>
+                            <TextBox Height="26" VerticalContentAlignment="Center" Text="{Binding ComfyUIServerUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,5,0,10"></TextBox>
+                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,10" TextWrapping="Wrap"
+                                       Text="ComfyUI server URL (default: http://localhost:8188). Only change if using custom port."></TextBlock>
+
+                            <Label Content="Startup Timeout (seconds):"></Label>
+                            <TextBox Height="26" VerticalContentAlignment="Center" Text="{Binding ComfyUIStartupTimeout, UpdateSourceTrigger=PropertyChanged}" Margin="0,5,0,15" Width="100" HorizontalAlignment="Left"></TextBox>
+                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,15" TextWrapping="Wrap"
+                                       Text="Maximum time to wait for ComfyUI server to start (default: 30 seconds)."></TextBlock>
+                        </StackPanel>
+
                     </StackPanel>
                 </Grid>
 

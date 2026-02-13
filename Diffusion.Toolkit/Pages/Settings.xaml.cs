@@ -62,6 +62,10 @@ namespace Diffusion.Toolkit.Pages
                 {
                     ExternalApplicationsTab.IsSelected = true;
                 }
+                else if (args.TargetUri.Path.ToLower() == "settings" && args.TargetUri.Fragment != null && args.TargetUri.Fragment.ToLowerInvariant() == "comfyui")
+                {
+                    TabItem.IsSelected = true; // "General" tab where ComfyUI settings are
+                }
             };
 
             DataContext = _model;
@@ -106,6 +110,12 @@ namespace Diffusion.Toolkit.Pages
 
             // Token Analyzer settings
             _model.TokenAnalyzerPath = _settings.TokenAnalyzerPath;
+
+            // ComfyUI settings
+            _model.ComfyUILauncherPath = _settings.ComfyUILauncherPath;
+            _model.ComfyUILauncherArgs = _settings.ComfyUILauncherArgs;
+            _model.ComfyUIServerUrl = _settings.ComfyUIServerUrl;
+            _model.ComfyUIStartupTimeout = _settings.ComfyUIStartupTimeout;
 
             _model.StoreMetadata = _settings.StoreMetadata;
             _model.StoreWorkflow = _settings.StoreWorkflow;
@@ -415,6 +425,12 @@ namespace Diffusion.Toolkit.Pages
 
                 // Token Analyzer settings
                 _settings.TokenAnalyzerPath = _model.TokenAnalyzerPath;
+
+                // ComfyUI settings
+                _settings.ComfyUILauncherPath = _model.ComfyUILauncherPath;
+                _settings.ComfyUILauncherArgs = _model.ComfyUILauncherArgs;
+                _settings.ComfyUIServerUrl = _model.ComfyUIServerUrl;
+                _settings.ComfyUIStartupTimeout = _model.ComfyUIStartupTimeout;
             }
         }
 
@@ -478,6 +494,20 @@ namespace Diffusion.Toolkit.Pages
             if (dialog.ShowDialog(this._window) == CommonFileDialogResult.Ok)
             {
                 _model.TokenAnalyzerPath = dialog.FileName;
+            }
+        }
+
+        private void BrowseComfyUILauncher_OnClick(object sender, RoutedEventArgs e)
+        {
+            using var dialog = new CommonOpenFileDialog();
+            dialog.Title = "Select ComfyUI Launcher";
+            dialog.Filters.Add(new CommonFileDialogFilter("Batch files", "*.bat;*.cmd"));
+            dialog.Filters.Add(new CommonFileDialogFilter("Python executable", "python.exe"));
+            dialog.Filters.Add(new CommonFileDialogFilter("Executable files", "*.exe"));
+            dialog.Filters.Add(new CommonFileDialogFilter("All files", "*.*"));
+            if (dialog.ShowDialog(this._window) == CommonFileDialogResult.Ok)
+            {
+                _model.ComfyUILauncherPath = dialog.FileName;
             }
         }
     }

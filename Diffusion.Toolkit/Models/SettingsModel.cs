@@ -288,6 +288,31 @@ public class SettingsModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    // ComfyUI Integration
+    public string? ComfyUILauncherPath
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string? ComfyUILauncherArgs
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string? ComfyUIServerUrl
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public int ComfyUIStartupTimeout
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public override bool IsDirty => _isDirty;
 
 }

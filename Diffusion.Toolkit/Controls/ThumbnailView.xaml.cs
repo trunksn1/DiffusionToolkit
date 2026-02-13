@@ -77,6 +77,7 @@ namespace Diffusion.Toolkit.Controls
             Model.MoveCommand = new RelayCommand<object>(o => MoveSelected());
             Model.PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
             Model.SendToTokenAnalyzerCommand = new RelayCommand<object>(o => SendToTokenAnalyzer());
+            Model.OpenInComfyUICommand = new RelayCommand<object>(o => OpenInComfyUI());
             Model.RescanCommand = new AsyncCommand<object>(o => RescanSelected());
             Model.RescanFolderCommand = new AsyncCommand<object>(o => RescanFolder(true));
             Model.ScanFolderCommand = new AsyncCommand<object>(o => RescanFolder(false));
@@ -175,6 +176,15 @@ namespace Diffusion.Toolkit.Controls
             if (imageEntry != null && !string.IsNullOrEmpty(imageEntry.Path))
             {
                 await ServiceLocator.TokenAnalyzerService.SendToTokenAnalyzer(imageEntry.Path);
+            }
+        }
+
+        private async void OpenInComfyUI()
+        {
+            var imageEntry = ThumbnailListView.SelectedItems.Cast<ImageEntry>().FirstOrDefault();
+            if (imageEntry != null && !string.IsNullOrEmpty(imageEntry.Path))
+            {
+                await ServiceLocator.ComfyUIService.LaunchComfyUIWithImage(imageEntry.Path);
             }
         }
 

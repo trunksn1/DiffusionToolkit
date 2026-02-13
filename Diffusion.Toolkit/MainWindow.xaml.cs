@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using Path = System.IO.Path;
@@ -27,6 +28,8 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Diagnostics;
+using System.Net.Http;
+using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Diffusion.Civitai.Models;
@@ -118,6 +121,7 @@ namespace Diffusion.Toolkit
 
                 _model.LaunchCivitaiScraperCommand = new RelayCommand<object>((o) => LaunchCivitaiScraper());
                 _model.LaunchCivitaiPipelineCommand = new AsyncCommand<object>(async (o) => await LaunchCivitaiPipeline());
+                _model.LaunchComfyUICommand = new RelayCommand<object>((o) => LaunchComfyUI());
 
                 _model.ReloadHashes = new AsyncCommand<object>(async (o) =>
                 {
@@ -1713,6 +1717,455 @@ namespace Diffusion.Toolkit
             {
                 Logger.Log($"LaunchCivitaiPipeline: ERROR - {ex.Message}");
                 await ServiceLocator.MessageService.Show($"Error launching pipeline: {ex.Message}", "Error", PopupButtons.OK);
+            }
+        }
+
+        // ====================================================================
+        // ComfyUI Integration
+        // ====================================================================
+
+        private async void LaunchComfyUI()
+        {
+            try
+            {
+                Logger.Log("==========================================");
+                Logger.Log("LaunchComfyUI: STARTING");
+                Logger.Log("==========================================");
+
+                if (_model.CurrentImage == null)
+                {
+                    await ServiceLocator.MessageService.Show(
+                        "No image is currently selected. Please select an image first.",
+                        "No Image Selected",
+                        PopupButtons.OK);
+                    return;
+                }
+
+                var launcherPath = _settings.ComfyUILauncherPath;
+
+                if (string.IsNullOrEmpty(launcherPath))
+                {
+                    await ServiceLocator.MessageService.Show(
+                        "ComfyUI launcher path is not configured.\n\n" +
+                        "Please set the path to your ComfyUI launcher in Settings.\n" +
+                        "Examples:\n" +
+                        "  • run_nvidia_gpu.bat\n" +
+                        "  • python.exe (if you launch with: python main.py)\n" +
+                        "  • ComfyUI.exe (portable version)",
+                        "Configuration Required",
+                        PopupButtons.OK);
+                    Dispatcher.Invoke(() => ServiceLocator.NavigatorService.Goto("settings#comfyui"));
+                    return;
+                }
+
+                if (!File.Exists(launcherPath))
+                {
+                    await ServiceLocator.MessageService.Show(
+                        $"ComfyUI launcher not found:\n{launcherPath}\n\nPlease verify the path in Settings.",
+                        "Invalid Path",
+                        PopupButtons.OK);
+                    return;
+                }
+
+                string imagePath = _model.CurrentImage.Path;
+                Logger.Log($"LaunchComfyUI: Image Path: {imagePath}");
+
+                // Extract workflow from image
+                var workflow = await ExtractWorkflowFromImage(imagePath);
+
+                if (workflow == null)
+                {
+                    Logger.Log("LaunchComfyUI: No workflow found in image");
+                    await ServiceLocator.MessageService.Show(
+                        "This image does not contain workflow metadata.\n\n" +
+                        "ComfyUI will launch, but no workflow will be loaded.",
+                        "No Workflow Found",
+                        PopupButtons.OK);
+                    // Continue anyway - user might want to use ComfyUI for other purposes
+                }
+                else if (!IsValidComfyUIWorkflow(workflow))
+                {
+                    Logger.Log("LaunchComfyUI: Workflow is not ComfyUI format");
+                    await ServiceLocator.MessageService.Show(
+                        "This image's workflow metadata is not in ComfyUI format.\n\n" +
+                        "It might be from a different tool (Automatic1111, InvokeAI, etc.).\n\n" +
+                        "ComfyUI will launch, but the workflow cannot be loaded.",
+                        "Not a ComfyUI Workflow",
+                        PopupButtons.OK);
+                    // Set workflow to null so we don't try to load it
+                    workflow = null;
+                }
+
+                // Prepare launch parameters
+                var workingDir = Path.GetDirectoryName(launcherPath);
+                string arguments = _settings.ComfyUILauncherArgs ?? "";
+
+                // If launcher is python.exe, add main.py
+                if (Path.GetFileName(launcherPath).Equals("python.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    var mainPyPath = Path.Combine(workingDir, "main.py");
+                    if (File.Exists(mainPyPath))
+                    {
+                        arguments = $"\"{mainPyPath}\" {arguments}";
+                    }
+                }
+
+                Logger.Log($"LaunchComfyUI: Launcher: {launcherPath}");
+                Logger.Log($"LaunchComfyUI: Arguments: {arguments}");
+                Logger.Log($"LaunchComfyUI: Working Directory: {workingDir}");
+
+                // Launch ComfyUI and wait for server
+                var launched = await LaunchAndWaitForComfyUI(launcherPath, workingDir, arguments);
+
+                if (!launched)
+                {
+                    await ServiceLocator.MessageService.Show(
+                        "ComfyUI failed to start or took too long to respond.\n\n" +
+                        "Please check that ComfyUI is properly installed and try launching it manually first.",
+                        "Launch Failed",
+                        PopupButtons.OK);
+                    return;
+                }
+
+                // Load workflow if we extracted one
+                if (workflow != null)
+                {
+                    var loaded = await LoadWorkflowInComfyUI(workflow);
+
+                    if (loaded)
+                    {
+                        Logger.Log("LaunchComfyUI: SUCCESS - Workflow loaded!");
+                        // Note: URL method opens browser automatically with workflow
+                        // API method requires separate browser open
+                        ServiceLocator.ToastService.Toast(
+                            "Workflow loaded successfully! Check your browser.",
+                            "ComfyUI",
+                            5);
+                    }
+                    else
+                    {
+                        // Failed to load workflow, open ComfyUI anyway
+                        Logger.Log("LaunchComfyUI: Failed to load workflow, opening ComfyUI without it");
+
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = _settings.ComfyUIServerUrl ?? "http://localhost:8188",
+                            UseShellExecute = true
+                        });
+
+                        await ServiceLocator.MessageService.Show(
+                            "ComfyUI launched successfully, but failed to load the workflow.\n\n" +
+                            "You can manually drag the image into ComfyUI to load it.",
+                            "Workflow Load Failed",
+                            PopupButtons.OK);
+                    }
+                }
+                else
+                {
+                    // No workflow found, just open ComfyUI
+                    Logger.Log("LaunchComfyUI: No workflow to load, opening ComfyUI");
+
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = _settings.ComfyUIServerUrl ?? "http://localhost:8188",
+                        UseShellExecute = true
+                    });
+                }
+
+                Logger.Log("LaunchComfyUI: COMPLETED");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"LaunchComfyUI: ERROR - {ex.Message}");
+                await ServiceLocator.MessageService.Show(
+                    $"Error launching ComfyUI:\n{ex.Message}\n\nPlease verify your ComfyUI launcher path in Settings.",
+                    "Error",
+                    PopupButtons.OK);
+            }
+        }
+
+        private async Task<string?> ExtractWorkflowFromImage(string imagePath)
+        {
+            try
+            {
+                // Get workflow from the current image if it's stored in the database
+                if (!string.IsNullOrEmpty(_model.CurrentImage?.Workflow))
+                {
+                    Logger.Log("LaunchComfyUI: Workflow retrieved from database");
+                    return _model.CurrentImage.Workflow;
+                }
+
+                Logger.Log("LaunchComfyUI: No workflow found in database");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"ExtractWorkflowFromImage: Failed to extract workflow - {ex.Message}");
+                return null;
+            }
+        }
+
+        private bool IsValidComfyUIWorkflow(string workflowJson)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(workflowJson))
+                {
+                    Logger.Log("IsValidComfyUIWorkflow: Workflow is null or empty");
+                    return false;
+                }
+
+                // Parse as JSON
+                var workflow = JsonNode.Parse(workflowJson);
+
+                // Check if it's a JSON object (not array or primitive)
+                if (workflow is not JsonObject workflowObj)
+                {
+                    Logger.Log("IsValidComfyUIWorkflow: Workflow is not a JSON object");
+                    return false;
+                }
+
+                // ComfyUI workflows are objects with numeric string keys
+                // Each value should have "class_type" and "inputs"
+                var hasValidNodes = false;
+                var nodeCount = 0;
+
+                foreach (var kvp in workflowObj)
+                {
+                    // Keys should be numeric strings ("1", "2", etc.)
+                    if (!int.TryParse(kvp.Key, out _))
+                    {
+                        continue;
+                    }
+
+                    var node = kvp.Value as JsonObject;
+                    if (node == null)
+                    {
+                        continue;
+                    }
+
+                    // Check for ComfyUI-specific fields
+                    if (node.ContainsKey("class_type") && node.ContainsKey("inputs"))
+                    {
+                        hasValidNodes = true;
+                        nodeCount++;
+                    }
+                }
+
+                if (hasValidNodes)
+                {
+                    Logger.Log($"IsValidComfyUIWorkflow: Valid ComfyUI workflow detected ({nodeCount} nodes)");
+                }
+                else
+                {
+                    Logger.Log("IsValidComfyUIWorkflow: No valid ComfyUI nodes found");
+                }
+
+                return hasValidNodes;
+            }
+            catch (JsonException ex)
+            {
+                Logger.Log($"IsValidComfyUIWorkflow: Invalid JSON - {ex.Message}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"IsValidComfyUIWorkflow: Validation failed - {ex.Message}");
+                return false;
+            }
+        }
+
+        private async Task<bool> LaunchAndWaitForComfyUI(string launcherPath, string workingDir, string args)
+        {
+            try
+            {
+                // Check if already running
+                if (await IsComfyUIRunning())
+                {
+                    Logger.Log("LaunchComfyUI: ComfyUI is already running");
+                    // Add extra delay to ensure API is fully ready
+                    Logger.Log("LaunchComfyUI: Waiting 2 seconds to ensure API is fully ready...");
+                    await Task.Delay(2000);
+                    return true;
+                }
+
+                Logger.Log("LaunchComfyUI: ComfyUI not detected, launching new instance...");
+
+                // Launch ComfyUI
+                var processInfo = new ProcessStartInfo()
+                {
+                    FileName = launcherPath,
+                    Arguments = args,
+                    WorkingDirectory = workingDir,
+                    UseShellExecute = true,
+                    CreateNoWindow = false
+                };
+
+                Process.Start(processInfo);
+                Logger.Log("LaunchComfyUI: Process started, waiting for server...");
+
+                // Wait for server to be ready
+                // Use configured timeout, or default to 60 seconds (ComfyUI can be slow on first launch)
+                int timeout = _settings.ComfyUIStartupTimeout;
+                if (timeout < 30)
+                {
+                    timeout = 60; // Override if user set it too low
+                    Logger.Log($"LaunchComfyUI: Timeout was {_settings.ComfyUIStartupTimeout}s, using {timeout}s for safety");
+                }
+
+                Logger.Log($"LaunchComfyUI: Will poll for up to {timeout} seconds...");
+
+                for (int i = 0; i < timeout; i++)
+                {
+                    await Task.Delay(1000);
+
+                    if (i % 5 == 0 && i > 0)
+                    {
+                        Logger.Log($"LaunchComfyUI: Still waiting... ({i}/{timeout} seconds)");
+                    }
+
+                    if (await IsComfyUIRunning())
+                    {
+                        Logger.Log($"LaunchComfyUI: Server responded after {i + 1} seconds");
+                        // Add extra delay to ensure API is fully initialized
+                        Logger.Log("LaunchComfyUI: Waiting 3 more seconds for API to fully initialize...");
+                        await Task.Delay(3000);
+                        Logger.Log("LaunchComfyUI: Server ready!");
+                        return true;
+                    }
+                }
+
+                Logger.Log($"LaunchComfyUI: Timeout after {timeout} seconds waiting for server");
+                Logger.Log("LaunchComfyUI: ComfyUI might have started but is taking longer than expected");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"LaunchComfyUI: Failed to launch - {ex.Message}");
+                Logger.Log($"LaunchComfyUI: Stack trace - {ex.StackTrace}");
+                return false;
+            }
+        }
+
+        private async Task<bool> IsComfyUIRunning()
+        {
+            try
+            {
+                using var httpClient = new HttpClient();
+                httpClient.Timeout = TimeSpan.FromSeconds(2);
+                var serverUrl = _settings.ComfyUIServerUrl ?? "http://localhost:8188";
+                var response = await httpClient.GetAsync(serverUrl);
+                return response.IsSuccessStatusCode;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async Task<bool> LoadWorkflowInComfyUI(string workflowJson)
+        {
+            try
+            {
+                var serverUrl = _settings.ComfyUIServerUrl ?? "http://localhost:8188";
+
+                // Minify workflow JSON to reduce URL length
+                var minified = workflowJson
+                    .Replace("\r\n", "")
+                    .Replace("\n", "")
+                    .Replace("  ", "")
+                    .Replace("\t", "");
+
+                Logger.Log($"LaunchComfyUI: Workflow size: {minified.Length} characters");
+
+                // Try URL parameter method first (works for most workflows, no auto-execution)
+                // URL length limit is typically 8KB for modern browsers, 2KB for older ones
+                // Using 6KB as safe threshold
+                if (minified.Length < 6000)
+                {
+                    Logger.Log("LaunchComfyUI: Using URL parameter method (workflow appears in UI, no auto-execution)");
+
+                    var encoded = System.Uri.EscapeDataString(minified);
+                    var urlWithWorkflow = $"{serverUrl}/?workflow={encoded}";
+
+                    Logger.Log($"LaunchComfyUI: Final URL length: {urlWithWorkflow.Length} characters");
+
+                    // Open browser with workflow URL
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = urlWithWorkflow,
+                        UseShellExecute = true
+                    });
+
+                    Logger.Log("LaunchComfyUI: Workflow loaded via URL parameter");
+                    return true;
+                }
+                else
+                {
+                    // Workflow too large for URL, fall back to API method
+                    Logger.Log($"LaunchComfyUI: Workflow too large ({minified.Length} chars), using API method");
+                    Logger.Log("LaunchComfyUI: WARNING - API method queues workflow for execution!");
+
+                    // Wait a bit longer to ensure API is fully ready
+                    Logger.Log("LaunchComfyUI: Waiting 3 seconds for API to be fully ready...");
+                    await Task.Delay(3000);
+
+                    return await LoadWorkflowViaAPI(workflowJson, serverUrl);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"LaunchComfyUI: Failed to load workflow - {ex.Message}");
+                Logger.Log($"LaunchComfyUI: Stack trace - {ex.StackTrace}");
+                return false;
+            }
+        }
+
+        private async Task<bool> LoadWorkflowViaAPI(string workflowJson, string serverUrl)
+        {
+            try
+            {
+                using var httpClient = new HttpClient();
+                httpClient.Timeout = TimeSpan.FromSeconds(10);
+
+                // ComfyUI API endpoint for queueing workflows
+                // NOTE: This queues the workflow for EXECUTION, not just loading into UI
+                var content = new StringContent(
+                    $"{{\"prompt\": {workflowJson}}}",
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                Logger.Log($"LoadWorkflowViaAPI: Posting to {serverUrl}/api/prompt");
+                var response = await httpClient.PostAsync($"{serverUrl}/api/prompt", content);
+
+                var responseText = await response.Content.ReadAsStringAsync();
+                Logger.Log($"LoadWorkflowViaAPI: Response status: {response.StatusCode}");
+                Logger.Log($"LoadWorkflowViaAPI: Response body: {responseText}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    // Check if response contains error details
+                    if (responseText.Contains("\"error\""))
+                    {
+                        Logger.Log("LoadWorkflowViaAPI: API returned error in response body");
+                        return false;
+                    }
+
+                    Logger.Log("LoadWorkflowViaAPI: Workflow queued successfully (will auto-execute)");
+                    return true;
+                }
+                else
+                {
+                    Logger.Log($"LoadWorkflowViaAPI: HTTP error - {response.StatusCode}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"LoadWorkflowViaAPI: Exception - {ex.Message}");
+                Logger.Log($"LoadWorkflowViaAPI: Stack trace - {ex.StackTrace}");
+                return false;
             }
         }
 

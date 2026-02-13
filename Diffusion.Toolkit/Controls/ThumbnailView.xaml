@@ -575,6 +575,7 @@
                     <!--<MenuItem IsEnabled="{Binding IsImage}" Header="{lex:Loc Thumbnail.ContextMenu.Move}" Command="{Binding MoveCommand}"/>-->
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="Post to CivitAI" Command="{Binding PostToCivitaiCommand}" />
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="Send to Token Analyzer" Command="{Binding SendToTokenAnalyzerCommand}" />
+                    <MenuItem Style="{StaticResource FileMenuItem}" Header="Open in ComfyUI" Command="{Binding OpenInComfyUICommand}" />
                     <Separator Style="{StaticResource FileSeparator}"/>
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="{lex:Loc Thumbnail.ContextMenu.ExpandToFolder}" Command="{Binding ExpandToFolderCommand}"/>
                     <Separator Style="{StaticResource FileSeparator}"/>

@@ -505,6 +505,31 @@ public class Settings : SettingsContainer, IScanOptions
         get;
         set => UpdateValue(ref field, value);
     }
+
+    // ComfyUI Integration
+    public string? ComfyUILauncherPath
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
+
+    public string? ComfyUILauncherArgs
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
+
+    public string ComfyUIServerUrl
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    } = "http://localhost:8188";
+
+    public int ComfyUIStartupTimeout
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    } = 30;
 }
 
 public class PreviewWindowState

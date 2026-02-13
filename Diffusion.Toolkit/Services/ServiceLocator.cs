@@ -164,6 +164,11 @@ public class ServiceLocator
         get { return field ??= new TokenAnalyzerService(); }
     }
 
+    public static ComfyUIService ComfyUIService
+    {
+        get { return field ??= new ComfyUIService(); }
+    }
+
     public static CivitAiExtensionDataStore? CivitAiExtensionDataStore => _civitAiExtensionDataStore;
 }
 
