@@ -78,6 +78,7 @@ namespace Diffusion.Toolkit.Controls
             Model.PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
             Model.SendToTokenAnalyzerCommand = new RelayCommand<object>(o => SendToTokenAnalyzer());
             Model.OpenInComfyUICommand = new RelayCommand<object>(o => OpenInComfyUI());
+            Model.EditTagsCommand = new RelayCommand<object>(o => EditTagsForSelection());
             Model.RescanCommand = new AsyncCommand<object>(o => RescanSelected());
             Model.RescanFolderCommand = new AsyncCommand<object>(o => RescanFolder(true));
             Model.ScanFolderCommand = new AsyncCommand<object>(o => RescanFolder(false));
@@ -250,6 +251,10 @@ namespace Diffusion.Toolkit.Controls
 
                 case Key.N when e.KeyboardDevice.Modifiers == ModifierKeys.None:
                     NSFWSelected();
+                    break;
+
+                case Key.T when e.KeyboardDevice.Modifiers == ModifierKeys.None:
+                    EditTagsForSelection();
                     break;
 
                 case Key.OemTilde:
@@ -626,6 +631,26 @@ namespace Diffusion.Toolkit.Controls
                     AdvanceOnTag();
                 }
             }
+        }
+
+        private void EditTagsForSelection()
+        {
+            if (ThumbnailListView.SelectedItems == null) return;
+
+            var imageEntries = ThumbnailListView.SelectedItems.Cast<ImageEntry>()
+                .Where(e => e.EntryType == EntryType.File)
+                .ToList();
+
+            if (!imageEntries.Any()) return;
+
+            var imageIds = imageEntries.Select(e => e.Id).ToList();
+
+            var window = new BulkTagEditorWindow(imageIds)
+            {
+                Owner = Window.GetWindow(this)
+            };
+
+            window.ShowDialog();
         }
 
         void AdvanceOnTag()

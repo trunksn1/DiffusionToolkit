@@ -57,6 +57,9 @@ public class ComfyUIService
         _settings = ServiceLocator.Settings;
     }
 
+    private enum WorkflowFormat { Invalid, PromptApi, Graph }
+    private WorkflowFormat _currentWorkflowFormat = WorkflowFormat.Invalid;
+
     // Store the current image path for file-based loading
     private string? _currentImagePath;
 
@@ -115,13 +118,17 @@ public class ComfyUIService
                     "No Workflow Found");
                 // Continue anyway - user might want to use ComfyUI
             }
-            else if (!IsValidComfyUIWorkflow(workflow))
+            else
             {
-                Logger.Log("ComfyUIService: Workflow is not ComfyUI format");
-                ServiceLocator.ToastService.Toast(
-                    "This image's workflow is not in ComfyUI format (might be A1111/InvokeAI). ComfyUI will launch without loading it.",
-                    "Not a ComfyUI Workflow");
-                workflow = null;
+                _currentWorkflowFormat = DetectWorkflowFormat(workflow);
+                if (_currentWorkflowFormat == WorkflowFormat.Invalid)
+                {
+                    Logger.Log("ComfyUIService: Workflow is not ComfyUI format");
+                    ServiceLocator.ToastService.Toast(
+                        "This image's workflow is not in ComfyUI format (might be A1111/InvokeAI). ComfyUI will launch without loading it.",
+                        "Not a ComfyUI Workflow");
+                    workflow = null;
+                }
             }
 
             // Prepare launch parameters
@@ -391,67 +398,60 @@ public class ComfyUIService
         }
     }
 
-    private bool IsValidComfyUIWorkflow(string workflowJson)
+    private WorkflowFormat DetectWorkflowFormat(string workflowJson)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(workflowJson))
             {
-                Logger.Log("ComfyUIService.IsValidComfyUIWorkflow: Workflow is null or empty");
-                return false;
+                Logger.Log("ComfyUIService.DetectWorkflowFormat: Workflow is null or empty");
+                return WorkflowFormat.Invalid;
             }
 
             var workflow = JsonNode.Parse(workflowJson);
 
             if (workflow is not JsonObject workflowObj)
             {
-                Logger.Log("ComfyUIService.IsValidComfyUIWorkflow: Workflow is not a JSON object");
-                return false;
+                Logger.Log("ComfyUIService.DetectWorkflowFormat: Workflow is not a JSON object");
+                return WorkflowFormat.Invalid;
             }
 
-            var hasValidNodes = false;
-            var nodeCount = 0;
+            // Check for graph format: has "nodes" array (canvas/graph layout)
+            if (workflowObj.ContainsKey("nodes") && workflowObj["nodes"] is JsonArray nodesArray)
+            {
+                Logger.Log($"ComfyUIService.DetectWorkflowFormat: Graph format detected ({nodesArray.Count} nodes)");
+                return WorkflowFormat.Graph;
+            }
 
+            // Check for prompt/API format: numeric string keys with class_type + inputs
+            var nodeCount = 0;
             foreach (var kvp in workflowObj)
             {
                 if (!int.TryParse(kvp.Key, out _))
-                {
                     continue;
-                }
 
-                var node = kvp.Value as JsonObject;
-                if (node == null)
-                {
-                    continue;
-                }
-
-                if (node.ContainsKey("class_type") && node.ContainsKey("inputs"))
-                {
-                    hasValidNodes = true;
+                if (kvp.Value is JsonObject node && node.ContainsKey("class_type") && node.ContainsKey("inputs"))
                     nodeCount++;
-                }
             }
 
-            if (hasValidNodes)
+            if (nodeCount > 0)
             {
-                Logger.Log($"ComfyUIService.IsValidComfyUIWorkflow: Valid ComfyUI workflow detected ({nodeCount} nodes)");
-            }
-            else
-            {
-                Logger.Log("ComfyUIService.IsValidComfyUIWorkflow: No valid ComfyUI nodes found");
+                Logger.Log($"ComfyUIService.DetectWorkflowFormat: Prompt/API format detected ({nodeCount} nodes)");
+                return WorkflowFormat.PromptApi;
             }
 
-            return hasValidNodes;
+            Logger.Log("ComfyUIService.DetectWorkflowFormat: No valid ComfyUI workflow format recognized");
+            return WorkflowFormat.Invalid;
         }
         catch (JsonException ex)
         {
-            Logger.Log($"ComfyUIService.IsValidComfyUIWorkflow: Invalid JSON - {ex.Message}");
-            return false;
+            Logger.Log($"ComfyUIService.DetectWorkflowFormat: Invalid JSON - {ex.Message}");
+            return WorkflowFormat.Invalid;
         }
         catch (Exception ex)
         {
-            Logger.Log($"ComfyUIService.IsValidComfyUIWorkflow: Validation failed - {ex.Message}");
-            return false;
+            Logger.Log($"ComfyUIService.DetectWorkflowFormat: Detection failed - {ex.Message}");
+            return WorkflowFormat.Invalid;
         }
     }
 
@@ -842,6 +842,11 @@ public class ComfyUIService
 
                 Logger.Log("ComfyUIService: Workflow loaded via URL parameter");
                 return true;
+            }
+            else if (_currentWorkflowFormat == WorkflowFormat.Graph)
+            {
+                Logger.Log($"ComfyUIService: Workflow too large ({minified.Length} chars) and is graph format - /api/prompt requires prompt format, falling through to clipboard/file methods");
+                return await LoadWorkflowViaFile(workflowJson);
             }
             else
             {

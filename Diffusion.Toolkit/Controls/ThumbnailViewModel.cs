@@ -389,4 +389,10 @@ public class ThumbnailViewModel : BaseNotify
 
     public ICommand RescanFolderCommand { get; set; }
     public ICommand ScanFolderCommand { get; set; }
+
+    public ICommand EditTagsCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
 }

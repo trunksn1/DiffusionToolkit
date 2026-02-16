@@ -561,6 +561,7 @@
                         <MenuItem Header="{lex:Loc Thumbnail.ContextMenu.Rate.Remove}" Click="Unrate_OnClick"></MenuItem>
                     </MenuItem>
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="{lex:Loc Thumbnail.ContextMenu.NSFW}" ToolTip="N" InputGestureText="N" Command="{Binding NSFWCommand}"/>
+                    <MenuItem Style="{StaticResource FileMenuItem}" Header="Edit Tags" InputGestureText="T" Command="{Binding EditTagsCommand}"/>
                     <Separator Style="{StaticResource FileSeparator}"/>
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="{lex:Loc Thumbnail.ContextMenu.CopyParameter}">
                         <MenuItem Header="{lex:Loc Thumbnail.ContextMenu.CopyParameter.Prompt}" Command="{Binding CopyPromptCommand}"/>

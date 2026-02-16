@@ -37,6 +37,47 @@ public class TagService
         }));
     }
 
+    public ObservableCollection<BulkImageTagView> GetBulkImageTagViews(IEnumerable<int> imageIds)
+    {
+        var idList = imageIds.ToList();
+        var imageCount = idList.Count;
+        var allTags = ServiceLocator.DataStore.GetTags();
+        var tagCounts = ServiceLocator.DataStore.GetTagCountsForImages(idList);
+
+        return new ObservableCollection<BulkImageTagView>(allTags.Select(tag =>
+        {
+            tagCounts.TryGetValue(tag.Id, out var count);
+
+            bool? isChecked;
+            bool isReadOnly;
+
+            if (count == imageCount)
+            {
+                isChecked = true;
+                isReadOnly = false;
+            }
+            else if (count > 0)
+            {
+                isChecked = null;
+                isReadOnly = true;
+            }
+            else
+            {
+                isChecked = false;
+                isReadOnly = false;
+            }
+
+            return new BulkImageTagView
+            {
+                Id = tag.Id,
+                Name = tag.Name,
+                IsChecked = isChecked,
+                OriginalState = isChecked,
+                IsReadOnly = isReadOnly,
+            };
+        }));
+    }
+
     public IReadOnlyCollection<ImageTagView> GetImageTagViews(int imageModelId)
     {
         var allTags = ServiceLocator.DataStore.GetTags();

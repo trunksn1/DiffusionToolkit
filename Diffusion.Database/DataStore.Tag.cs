@@ -167,6 +167,29 @@ namespace Diffusion.Database
             db.Close();
         }
 
+        public Dictionary<int, int> GetTagCountsForImages(IEnumerable<int> imageIds)
+        {
+            using var db = OpenConnection();
+
+            var idList = imageIds.ToList();
+            if (idList.Count == 0) return new Dictionary<int, int>();
+
+            var inClause = string.Join(", ", idList);
+            var query = $"SELECT TagId, COUNT(*) AS Cnt FROM ImageTag WHERE ImageId IN ({inClause}) GROUP BY TagId";
+
+            var results = db.Query<TagCountTemp>(query);
+
+            db.Close();
+
+            return results.ToDictionary(r => r.TagId, r => r.Cnt);
+        }
+
+        private class TagCountTemp
+        {
+            public int TagId { get; set; }
+            public int Cnt { get; set; }
+        }
+
         public void RemoveImageTags(int id)
         {
             using var db = OpenConnection();
