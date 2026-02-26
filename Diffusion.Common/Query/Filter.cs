@@ -114,6 +114,6 @@ public class Filter
     public bool UseUnavailable { get; set; }
     public bool Unavailable { get; set; }
 
-    public IEnumerable<NodeFilter>? NodeFilters { get; set; }
+    public IEnumerable<NodeFilter>? NodeFilters { get; set; } = Enumerable.Empty<NodeFilter>();
     public IReadOnlyCollection<int>? AlbumIds { get; set; }
 }
