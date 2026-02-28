@@ -32,6 +32,18 @@ public class QueryOptions
     public bool SearchRawData { get; set; }
     public bool SearchAllProperties { get; set; }
 
+    /// <summary>
+    /// Custom WHERE clause for smart album filtering. Applied as an INTERSECT filter.
+    /// </summary>
+    [JsonIgnore]
+    public string? CustomWhereClause { get; set; }
+
+    /// <summary>
+    /// Parameter bindings for the CustomWhereClause (key = @paramName, value = param value).
+    /// </summary>
+    [JsonIgnore]
+    public Dictionary<string, object>? CustomWhereParameters { get; set; }
+
     [JsonIgnore]
     public bool IsEmpty => Filter.IsEmpty && string.IsNullOrEmpty(Query);
 

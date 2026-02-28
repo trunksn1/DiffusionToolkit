@@ -36,5 +36,6 @@ public class FileParameters
 
     public IReadOnlyCollection<Node>? Nodes { get; set; }
     public string? Hash { get; set; }
+    public long? PerceptualHash { get; set; }
     public ImageType Type { get; set; }
 }

@@ -1,0 +1,225 @@
+<local:BorderlessWindow x:Class="Diffusion.Toolkit.TagManagerWindow"
+                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                  xmlns:local="clr-namespace:Diffusion.Toolkit"
+                  xmlns:converters="clr-namespace:Diffusion.Toolkit.Converters"
+                  mc:Ignorable="d"
+                  d:DataContext="{d:DesignInstance local:TagManagerModel, IsDesignTimeCreatable = True}"
+                  WindowStartupLocation="CenterOwner"
+                  MenuWidth="0"
+                  TitleWidth="*"
+                  Style="{StaticResource BorderlessWindowStyle}"
+                  Title="Tag Manager" Height="600" Width="750">
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="{Binding Escape}"/>
+    </Window.InputBindings>
+    <Window.Resources>
+        <converters:NullToVisibilityConverter x:Key="NullToVisibility"/>
+    </Window.Resources>
+    <Grid Margin="0,20,0,0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: Tag List -->
+        <Grid Grid.Column="0" Margin="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="Tags" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6"/>
+            <ListView Grid.Row="1" x:Name="TagListView"
+                      ItemsSource="{Binding Tags}"
+                      SelectedItem="{Binding SelectedTag}"
+                      SelectionChanged="TagList_SelectionChanged"
+                      BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                            <Image Source="{Binding IconPreview}" Width="16" Height="16" Margin="0,0,6,0"
+                                   Visibility="{Binding IconPreview, Converter={StaticResource NullToVisibility}}"/>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            <TextBlock VerticalAlignment="Center" Foreground="Gray" Margin="4,0,0,0">
+                                <Run Text="("/>
+                                <Run Text="{Binding ImageCount, Mode=OneWay}"/>
+                                <Run Text=")"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Padding" Value="2"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+        </Grid>
+
+        <!-- Right: Icon Editor Panel (visible when a tag is selected) -->
+        <Grid Grid.Column="1" Margin="8"
+              Visibility="{Binding SelectedTag, Converter={StaticResource NullToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Tag Name + Current Icon -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                <TextBlock FontSize="16" FontWeight="SemiBold">
+                    <Run Text="Icon for: "/>
+                    <Run Text="{Binding SelectedTag.Name, Mode=OneWay}"/>
+                </TextBlock>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <TextBlock Text="Current:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                            Width="32" Height="32" CornerRadius="3"
+                            Background="{DynamicResource BackgroundBrush}">
+                        <Image Source="{Binding SelectedTag.IconPreview}" Width="24" Height="24"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="(none — select one below)" VerticalAlignment="Center" Foreground="Gray"
+                               Margin="8,0,0,0" x:Name="NoIconText"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Section 1: Built-in Icons -->
+            <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                <TextBlock Text="Built-in Icons" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <ItemsControl ItemsSource="{Binding BuiltinIcons}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <ToggleButton IsChecked="{Binding IsSelected}" Width="36" Height="36" Margin="2"
+                                          Click="BuiltinIcon_Click" ToolTip="{Binding Key}">
+                                <Image Source="{Binding Preview}" Width="20" Height="20"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                            </ToggleButton>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Section 2: Emoji -->
+            <StackPanel Grid.Row="2" Margin="0,0,0,12">
+                <TextBlock Text="Emoji" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBox x:Name="EmojiInput" Width="60" FontSize="18" TextAlignment="Center"
+                             VerticalContentAlignment="Center" MaxLength="2"
+                             Text="{Binding EmojiText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Type or paste an emoji (e.g. from Win+. emoji picker)"/>
+                    <Button Click="SetEmoji_Click" Padding="12,4" Margin="8,0,0,0"
+                            ToolTip="Set this emoji as the tag icon">Set Emoji</Button>
+                    <TextBlock Text="Tip: Press Win+. to open the emoji picker" VerticalAlignment="Center"
+                               Foreground="Gray" FontSize="11" Margin="12,0,0,0"/>
+                </StackPanel>
+                <!-- Quick emoji picks -->
+                <WrapPanel Margin="0,6,0,0">
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F3A8;" Content="&#x1F3A8;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Art palette"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x2B50;" Content="&#x2B50;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Star"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F525;" Content="&#x1F525;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Fire"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x2764;" Content="&#x2764;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Heart"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F48E;" Content="&#x1F48E;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Gem"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F451;" Content="&#x1F451;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Crown"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x26A1;" Content="&#x26A1;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Lightning"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F512;" Content="&#x1F512;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Lock"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F440;" Content="&#x1F440;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Eyes"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F3AF;" Content="&#x1F3AF;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Target"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x2705;" Content="&#x2705;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Check"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x274C;" Content="&#x274C;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Cross"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F4F7;" Content="&#x1F4F7;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Camera"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F308;" Content="&#x1F308;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Rainbow"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F5BC;" Content="&#x1F5BC;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Picture"/>
+                    <Button Click="QuickEmoji_Click" Tag="&#x1F916;" Content="&#x1F916;" FontSize="16" Width="32" Height="32" Margin="2" ToolTip="Robot"/>
+                </WrapPanel>
+            </StackPanel>
+
+            <!-- Section 3: Icon Color -->
+            <StackPanel Grid.Row="3" Margin="0,0,0,12">
+                <TextBlock Text="Icon Color" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <WrapPanel>
+                    <Button Click="ColorSwatch_Click" Tag="#FFFFFF" Width="28" Height="28" Margin="2" ToolTip="White">
+                        <Button.Content><Border Background="#FFFFFF" Width="18" Height="18" CornerRadius="2" BorderBrush="Gray" BorderThickness="1"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#FF4444" Width="28" Height="28" Margin="2" ToolTip="Red">
+                        <Button.Content><Border Background="#FF4444" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#FF8800" Width="28" Height="28" Margin="2" ToolTip="Orange">
+                        <Button.Content><Border Background="#FF8800" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#FFDD00" Width="28" Height="28" Margin="2" ToolTip="Yellow">
+                        <Button.Content><Border Background="#FFDD00" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#44DD44" Width="28" Height="28" Margin="2" ToolTip="Green">
+                        <Button.Content><Border Background="#44DD44" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#44BBFF" Width="28" Height="28" Margin="2" ToolTip="Light Blue">
+                        <Button.Content><Border Background="#44BBFF" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#4488FF" Width="28" Height="28" Margin="2" ToolTip="Blue">
+                        <Button.Content><Border Background="#4488FF" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#AA44FF" Width="28" Height="28" Margin="2" ToolTip="Purple">
+                        <Button.Content><Border Background="#AA44FF" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#FF66CC" Width="28" Height="28" Margin="2" ToolTip="Pink">
+                        <Button.Content><Border Background="#FF66CC" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                    <Button Click="ColorSwatch_Click" Tag="#AAAAAA" Width="28" Height="28" Margin="2" ToolTip="Gray">
+                        <Button.Content><Border Background="#AAAAAA" Width="18" Height="18" CornerRadius="2"/></Button.Content>
+                    </Button>
+                </WrapPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBlock Text="Custom:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="CustomColorInput" Width="80" Text="{Binding SelectedColor, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Hex color, e.g. #FF5500" VerticalContentAlignment="Center"/>
+                    <Button Click="ApplyCustomColor_Click" Padding="8,2" Margin="6,0,0,0">Apply</Button>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Section 4: Custom Image -->
+            <StackPanel Grid.Row="4" Margin="0,0,0,12">
+                <TextBlock Text="Custom Image File" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <Button Click="BrowseIcon_Click" Padding="12,4" HorizontalAlignment="Left">Browse PNG / JPG...</Button>
+            </StackPanel>
+
+            <!-- Spacer -->
+            <Grid Grid.Row="5"/>
+
+            <!-- Bottom: Clear + Save -->
+            <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
+                <Button Click="ClearIcon_Click" Padding="12,6" Margin="0,0,8,0">Clear Icon</Button>
+                <Button Click="Save_Click" Padding="20,6" FontWeight="SemiBold">Save</Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Placeholder when no tag selected -->
+        <TextBlock Grid.Column="1" Text="Select a tag from the list to assign an icon"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="Gray" FontSize="13">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding SelectedTag}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+    </Grid>
+</local:BorderlessWindow>

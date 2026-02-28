@@ -86,6 +86,24 @@ public static class SearchControlModelExtensions
         model.UseUnavailable = filter.UseUnavailable;
         model.Unavailable = filter.Unavailable;
 
+        model.UsePathEx = filter.UsePathEx;
+        model.PathEx = filter.PathEx;
+        model.UseTag = filter.UseTag;
+        model.Tag = filter.Tag;
+        model.UseTagEx = filter.UseTagEx;
+        model.TagEx = filter.TagEx;
+        model.UseHasTag = filter.UseHasTag;
+        model.HasTag = filter.HasTag;
+
+        model.UseCivitaiLink = filter.UseCivitaiLink;
+        model.CivitaiLink = filter.CivitaiLink;
+        model.UseCivitaiLoraRiforgiati = filter.UseCivitaiLoraRiforgiati;
+        model.CivitaiLoraRiforgiati = filter.CivitaiLoraRiforgiati;
+        model.UseCivitaiLoraInForge = filter.UseCivitaiLoraInForge;
+        model.CivitaiLoraInForge = filter.CivitaiLoraInForge;
+        model.UseCivitaiReforgedTags = filter.UseCivitaiReforgedTags;
+        model.CivitaiReforgedTags = filter.CivitaiReforgedTags;
+
         model.NodeFilters = new ObservableCollection<Controls.NodeFilter>(filter.NodeFilters.Select(d => new Controls.NodeFilter()
         {
             IsActive = d.IsActive,
@@ -175,6 +193,24 @@ public static class SearchControlModelExtensions
 
         filter.UseUnavailable = model.UseUnavailable;
         filter.Unavailable = model.Unavailable;
+
+        filter.UsePathEx = model.UsePathEx;
+        filter.PathEx = model.PathEx;
+        filter.UseTag = model.UseTag;
+        filter.Tag = model.Tag;
+        filter.UseTagEx = model.UseTagEx;
+        filter.TagEx = model.TagEx;
+        filter.UseHasTag = model.UseHasTag;
+        filter.HasTag = model.HasTag;
+
+        filter.UseCivitaiLink = model.UseCivitaiLink;
+        filter.CivitaiLink = model.CivitaiLink;
+        filter.UseCivitaiLoraRiforgiati = model.UseCivitaiLoraRiforgiati;
+        filter.CivitaiLoraRiforgiati = model.CivitaiLoraRiforgiati;
+        filter.UseCivitaiLoraInForge = model.UseCivitaiLoraInForge;
+        filter.CivitaiLoraInForge = model.CivitaiLoraInForge;
+        filter.UseCivitaiReforgedTags = model.UseCivitaiReforgedTags;
+        filter.CivitaiReforgedTags = model.CivitaiReforgedTags;
 
         filter.NodeFilters = model.NodeFilters.Select(d => new NodeFilter()
         {

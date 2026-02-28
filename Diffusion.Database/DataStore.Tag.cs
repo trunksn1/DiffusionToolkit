@@ -14,7 +14,7 @@ namespace Diffusion.Database
         {
             using var db = OpenConnection();
 
-            var query = $"SELECT Id, Name FROM Tag ORDER BY Name";
+            var query = $"SELECT Id, Name, Icon FROM Tag ORDER BY Name";
 
             var models = db.Query<Tag>(query);
 
@@ -27,7 +27,7 @@ namespace Diffusion.Database
         {
             using var db = OpenConnection();
 
-            var query = $"SELECT Id, Name, (SELECT COUNT(1) FROM {nameof(ImageTag)} IT WHERE T.Id = IT.TagId) AS [Count] FROM Tag T ORDER BY Name";
+            var query = $"SELECT Id, Name, Icon, (SELECT COUNT(1) FROM {nameof(ImageTag)} IT WHERE T.Id = IT.TagId) AS [Count] FROM Tag T ORDER BY Name";
 
             var models = db.Query<TagCount>(query);
 
@@ -202,6 +202,49 @@ namespace Diffusion.Database
             }
 
             db.Close();
+        }
+
+        public void UpdateTagIcon(int id, string? icon)
+        {
+            using var db = OpenConnection();
+
+            var command = db.CreateCommand("UPDATE Tag SET Icon = ? WHERE Id = ?", icon, id);
+
+            lock (_lock)
+            {
+                command.ExecuteNonQuery();
+            }
+
+            db.Close();
+        }
+
+        private class TagIconIdsResult
+        {
+            public int ImageId { get; set; }
+            public string? TagIconIds { get; set; }
+        }
+
+        public Dictionary<int, string?> GetTagIconIdsForImages(IEnumerable<int> imageIds)
+        {
+            using var db = OpenConnection();
+
+            var idList = imageIds.ToList();
+            if (idList.Count == 0) return new Dictionary<int, string?>();
+
+            var inClause = string.Join(", ", idList);
+            var query = $"SELECT ImageId, GROUP_CONCAT(TagId) AS TagIconIds FROM ImageTag WHERE ImageId IN ({inClause}) GROUP BY ImageId";
+
+            var results = db.Query<TagIconIdsResult>(query);
+
+            db.Close();
+
+            // Start with all IDs mapped to null (no tags), then fill in results
+            var dict = idList.ToDictionary(id => id, _ => (string?)null);
+            foreach (var r in results)
+            {
+                dict[r.ImageId] = r.TagIconIds;
+            }
+            return dict;
         }
     }
 }

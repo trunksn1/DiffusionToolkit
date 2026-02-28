@@ -14,6 +14,14 @@ public partial class DataStore
     public bool RescanRequired { get; set; }
 
     private SQLiteConnection? _readOnlyConnection;
+    private CivitAiExtensionDataStore? _civitAiExtensionDataStore;
+
+    public void SetCivitAiExtensionDataStore(CivitAiExtensionDataStore? dataStore)
+    {
+        _civitAiExtensionDataStore = dataStore;
+    }
+
+    public CivitAiExtensionDataStore? CivitAiExtensionDataStore => _civitAiExtensionDataStore;
 
     public SQLiteConnection OpenReadonlyConnection()
     {
@@ -126,6 +134,7 @@ public partial class DataStore
                 db.CreateIndex<Image>(image => image.WorkflowId);
                 db.CreateIndex<Image>(image => image.HasError);
                 db.CreateIndex<Image>(image => image.Hash);
+                db.CreateIndex<Image>(image => image.PerceptualHash);
                 db.CreateIndex<Image>(image => image.ViewedDate);
                 db.CreateIndex<Image>(image => image.TouchedDate);
 
@@ -173,6 +182,13 @@ public partial class DataStore
 
                 db.CreateTable<Query>();
                 db.CreateIndex<Query>(query => query.Name, true);
+
+                db.CreateTable<PromptTemplate>();
+                db.CreateIndex<PromptTemplate>(pt => pt.Category);
+                db.CreateIndex<PromptTemplate>(pt => pt.Name);
+
+                db.CreateTable<SmartAlbum>();
+                db.CreateIndex<SmartAlbum>(sa => sa.Name);
 
             }
             finally

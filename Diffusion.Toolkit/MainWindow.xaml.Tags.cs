@@ -18,6 +18,7 @@ namespace Diffusion.Toolkit
         private void InitTags()
         {
             ServiceLocator.TagService.LoadTags = LoadTags;
+            ServiceLocator.TagService.RefreshTagIcons = RefreshTagIcons;
 
             _model.CreateTagCommand = new AsyncCommand<object>(async (o) =>
             {
@@ -104,6 +105,62 @@ namespace Diffusion.Toolkit
             _model.Tags.First(d => d.Id == id).Name = name;
         }
 
+        /// <summary>
+        /// Refreshes TagIconIds on visible thumbnails so tag icons update immediately.
+        /// If imageIds is null, refreshes all visible images (e.g. when a tag icon definition changes).
+        /// If imageIds is specified, refreshes only those images (e.g. when tags are assigned/removed).
+        /// </summary>
+        private void RefreshTagIcons(IEnumerable<int>? imageIds)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // Collect all visible ImageEntry objects from search and prompts pages
+                var visibleEntries = new List<ImageEntry>();
+
+                if (_search?.Images != null)
+                    visibleEntries.AddRange(_search.Images.Where(e => e.Id > 0));
+
+                if (_prompts?.PromptsResultImages != null)
+                    visibleEntries.AddRange(_prompts.PromptsResultImages.Where(e => e.Id > 0));
+
+                if (visibleEntries.Count == 0) return;
+
+                IEnumerable<ImageEntry> entriesToRefresh;
+
+                if (imageIds != null)
+                {
+                    var idSet = new HashSet<int>(imageIds);
+                    entriesToRefresh = visibleEntries.Where(e => idSet.Contains(e.Id));
+                }
+                else
+                {
+                    entriesToRefresh = visibleEntries;
+                }
+
+                var entriesToRefreshList = entriesToRefresh.ToList();
+                if (entriesToRefreshList.Count == 0) return;
+
+                var entryIds = entriesToRefreshList.Select(e => e.Id).Distinct().ToList();
+                var updatedTagIconIds = _dataStore.GetTagIconIdsForImages(entryIds);
+
+                // When imageIds is null, icon definitions changed (not tag assignments).
+                // TagIconIds won't change (same tag IDs), so SetField won't fire PropertyChanged.
+                // Force re-render by nulling first, then setting the real value.
+                var forceRerender = imageIds == null;
+
+                foreach (var entry in entriesToRefreshList)
+                {
+                    var newValue = updatedTagIconIds.TryGetValue(entry.Id, out var val) ? val : null;
+
+                    if (forceRerender && entry.TagIconIds == newValue)
+                    {
+                        // Force PropertyChanged by setting null first
+                        entry.TagIconIds = null;
+                    }
+                    entry.TagIconIds = newValue;
+                }
+            });
+        }
 
     }
 }

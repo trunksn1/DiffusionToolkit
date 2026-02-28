@@ -102,29 +102,28 @@ namespace Diffusion.Toolkit.Pages
             if (sender is ItemsControl itemsControl)
             {
                 var scrollViewer = FindParentScrollViewer(itemsControl);
-                if (scrollViewer != null)
+                if (scrollViewer != null && scrollViewer.ScrollableHeight > 0)
                 {
                     bool canScrollUp = scrollViewer.VerticalOffset > 0;
                     bool canScrollDown = scrollViewer.VerticalOffset < scrollViewer.ScrollableHeight;
 
-                    // If it can't scroll in the direction, let parent handle it
-                    if ((e.Delta > 0 && !canScrollUp) || (e.Delta < 0 && !canScrollDown))
+                    if ((e.Delta > 0 && canScrollUp) || (e.Delta < 0 && canScrollDown))
                     {
+                        // Explicitly scroll the accordion's ScrollViewer
+                        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta * 0.5);
                         e.Handled = true;
-                        var parentEvent = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
-                        {
-                            RoutedEvent = UIElement.MouseWheelEvent,
-                            Source = sender
-                        };
-                        NavigationScrollViewer.RaiseEvent(parentEvent);
-
-
-                    }
-                    else
-                    {
-                        e.Handled = false;
+                        return;
                     }
                 }
+
+                // Can't scroll or nothing to scroll — bubble to the outer NavigationScrollViewer
+                e.Handled = true;
+                var parentEvent = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+                {
+                    RoutedEvent = UIElement.MouseWheelEvent,
+                    Source = sender
+                };
+                NavigationScrollViewer.RaiseEvent(parentEvent);
             }
         }
 
@@ -135,9 +134,10 @@ namespace Diffusion.Toolkit.Pages
                 if (current is ScrollViewer sv)
                     return sv;
 
-                current = VisualTreeHelper.GetParent(current);
-                if (current == null && current is FrameworkElement fe)
-                    current = fe.Parent;
+                var parent = VisualTreeHelper.GetParent(current);
+                if (parent == null && current is FrameworkElement fe)
+                    parent = fe.Parent;
+                current = parent;
             }
 
             return null;

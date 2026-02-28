@@ -488,6 +488,102 @@ public class FilterControlModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public bool UsePathEx
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string PathEx
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseTag
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string Tag
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseTagEx
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string TagEx
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseHasTag
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool HasTag
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseCivitaiLink
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool CivitaiLink
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseCivitaiLoraRiforgiati
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string CivitaiLoraRiforgiati
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseCivitaiLoraInForge
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string CivitaiLoraInForge
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseCivitaiReforgedTags
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string CivitaiReforgedTags
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public bool IsActive => (UsePrompt ||
                              UsePromptEx ||
                              UseNegativePrompt ||
@@ -509,6 +605,14 @@ public class FilterControlModel : BaseNotify
                              NoAestheticScore ||
                              UseAestheticScore ||
                              UsePath ||
+                             UsePathEx ||
+                             UseTag ||
+                             UseTagEx ||
+                             UseHasTag ||
+                             UseCivitaiLink ||
+                             UseCivitaiLoraRiforgiati ||
+                             UseCivitaiLoraInForge ||
+                             UseCivitaiReforgedTags ||
                              UseCreationDate ||
                              UseHyperNet ||
                              UseHyperNetStr ||
@@ -588,6 +692,22 @@ public class FilterControlModel : BaseNotify
         UseNoMetadata = false;
         UseInAlbum = false;
         UseUnavailable = false;
+        PathEx = String.Empty;
+        UsePathEx = false;
+        Tag = String.Empty;
+        UseTag = false;
+        TagEx = String.Empty;
+        UseTagEx = false;
+        HasTag = false;
+        UseHasTag = false;
+        CivitaiLink = false;
+        UseCivitaiLink = false;
+        CivitaiLoraRiforgiati = String.Empty;
+        UseCivitaiLoraRiforgiati = false;
+        CivitaiLoraInForge = String.Empty;
+        UseCivitaiLoraInForge = false;
+        CivitaiReforgedTags = String.Empty;
+        UseCivitaiReforgedTags = false;
         foreach (var nodeFilter in NodeFilters)
         {
             nodeFilter.IsActive = false;

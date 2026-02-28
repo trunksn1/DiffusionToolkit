@@ -238,6 +238,15 @@
                                 <ColumnDefinition Width="130"/>
                                 <ColumnDefinition/>
                             </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UsePathEx}" VerticalContentAlignment="Center" Content="Exclude Path"></CheckBox>
+                            <TextBox VerticalContentAlignment="Center" Text="{Binding PathEx}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
+                                     ToolTip="Exclude images matching this path (* = wildcard)"></TextBox>
+                        </Grid>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
                             <CheckBox IsChecked="{Binding UseCreationDate}" VerticalContentAlignment="Center" Content="{lex:Loc Filter.Metadata.CreatedDate}"></CheckBox>
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
                                 <DatePicker VerticalContentAlignment="Center" SelectedDate="{Binding Start}" ></DatePicker>
@@ -311,6 +320,75 @@
                                 <RadioButton Click="ButtonBase_OnClick" GroupName="Unavailable" IsChecked="{Binding Unavailable, Converter={StaticResource isValueBool}, ConverterParameter=true}" Margin="0,0,10,0" Content="{lex:Loc Filter.Metadata.True}"></RadioButton>
                                 <RadioButton Click="ButtonBase_OnClick" GroupName="Unavailable" IsChecked="{Binding Unavailable, Converter={StaticResource isValueBool}, ConverterParameter=false}" Content="{lex:Loc Filter.Metadata.False}"></RadioButton>
                             </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseTag}" VerticalContentAlignment="Center" Content="Tag"></CheckBox>
+                            <TextBox VerticalContentAlignment="Center" Text="{Binding Tag}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
+                                     ToolTip="Include images with this tag name (* = wildcard)"></TextBox>
+                        </Grid>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseTagEx}" VerticalContentAlignment="Center" Content="Exclude Tag"></CheckBox>
+                            <TextBox VerticalContentAlignment="Center" Text="{Binding TagEx}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
+                                     ToolTip="Exclude images with this tag name (* = wildcard)"></TextBox>
+                        </Grid>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseHasTag}" VerticalContentAlignment="Center" Content="Has Tags"></CheckBox>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <RadioButton Click="ButtonBase_OnClick" GroupName="HasTag" IsChecked="{Binding HasTag, Converter={StaticResource isValueBool}, ConverterParameter=true}" Margin="0,0,10,0" Content="{lex:Loc Filter.Metadata.True}"></RadioButton>
+                                <RadioButton Click="ButtonBase_OnClick" GroupName="HasTag" IsChecked="{Binding HasTag, Converter={StaticResource isValueBool}, ConverterParameter=false}" Content="{lex:Loc Filter.Metadata.False}"></RadioButton>
+                            </StackPanel>
+                        </Grid>
+                        <!-- CivitAI Extension Filters -->
+                        <Label FontWeight="Bold" Margin="0,10,0,5">CivitAI Extension</Label>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseCivitaiLink}" VerticalContentAlignment="Center" Content="Has CivitAI Data"></CheckBox>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <RadioButton Click="ButtonBase_OnClick" GroupName="CivitaiLink" IsChecked="{Binding CivitaiLink, Converter={StaticResource isValueBool}, ConverterParameter=true}" Margin="0,0,10,0" Content="{lex:Loc Filter.Metadata.True}"></RadioButton>
+                                <RadioButton Click="ButtonBase_OnClick" GroupName="CivitaiLink" IsChecked="{Binding CivitaiLink, Converter={StaticResource isValueBool}, ConverterParameter=false}" Content="{lex:Loc Filter.Metadata.False}"></RadioButton>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseCivitaiLoraRiforgiati}" VerticalContentAlignment="Center" Content="Lora Riforgiati"></CheckBox>
+                            <TextBox VerticalContentAlignment="Center" Text="{Binding CivitaiLoraRiforgiati}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
+                                     ToolTip="Empty = has any data. Text = contains search. =value for exact match. * for wildcard."></TextBox>
+                        </Grid>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseCivitaiLoraInForge}" VerticalContentAlignment="Center" Content="Lora In Forge"></CheckBox>
+                            <TextBox VerticalContentAlignment="Center" Text="{Binding CivitaiLoraInForge}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
+                                     ToolTip="Empty = has any data. Text = contains search. =value for exact match. * for wildcard."></TextBox>
+                        </Grid>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseCivitaiReforgedTags}" VerticalContentAlignment="Center" Content="Reforged Tags"></CheckBox>
+                            <TextBox VerticalContentAlignment="Center" Text="{Binding CivitaiReforgedTags}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
+                                     ToolTip="Empty = has any data. Text = contains search. =value for exact match. * for wildcard."></TextBox>
                         </Grid>
                     </StackPanel>
                 </ScrollViewer>

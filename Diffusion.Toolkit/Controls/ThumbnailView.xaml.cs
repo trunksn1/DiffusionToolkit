@@ -78,6 +78,8 @@ namespace Diffusion.Toolkit.Controls
             Model.PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
             Model.SendToTokenAnalyzerCommand = new RelayCommand<object>(o => SendToTokenAnalyzer());
             Model.OpenInComfyUICommand = new RelayCommand<object>(o => OpenInComfyUI());
+            Model.FindSimilarCommand = new RelayCommand<object>(o => FindSimilarImages());
+            Model.SavePromptAsTemplateCommand = new RelayCommand<object>(o => SavePromptAsTemplate());
             Model.EditTagsCommand = new RelayCommand<object>(o => EditTagsForSelection());
             Model.RescanCommand = new AsyncCommand<object>(o => RescanSelected());
             Model.RescanFolderCommand = new AsyncCommand<object>(o => RescanFolder(true));
@@ -187,6 +189,41 @@ namespace Diffusion.Toolkit.Controls
             {
                 await ServiceLocator.ComfyUIService.LaunchComfyUIWithImage(imageEntry.Path);
             }
+        }
+
+        private void FindSimilarImages()
+        {
+            var imageEntry = ThumbnailListView.SelectedItems.Cast<ImageEntry>().FirstOrDefault();
+            if (imageEntry == null) return;
+
+            var dataStore = ServiceLocator.DataStore!;
+            var image = dataStore.GetImage(imageEntry.Id);
+            if (image?.PerceptualHash == null)
+            {
+                System.Windows.MessageBox.Show(
+                    "This image does not have a perceptual hash. Run a scan or use Tools > Backfill Perceptual Hashes first.",
+                    "No Hash", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                return;
+            }
+
+            var window = new DuplicateFinderWindow();
+            window.Owner = System.Windows.Window.GetWindow(this);
+            window.SetTargetImage(image.Id, image.PerceptualHash.Value);
+            window.Show();
+        }
+
+        private void SavePromptAsTemplate()
+        {
+            var imageEntry = ThumbnailListView.SelectedItems.Cast<ImageEntry>().FirstOrDefault();
+            if (imageEntry == null) return;
+
+            var dataStore = ServiceLocator.DataStore!;
+            var image = dataStore.GetImage(imageEntry.Id);
+            if (image == null) return;
+
+            var window = new SavePromptTemplateWindow(image);
+            window.Owner = System.Windows.Window.GetWindow(this);
+            window.ShowDialog();
         }
 
         private void ModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)

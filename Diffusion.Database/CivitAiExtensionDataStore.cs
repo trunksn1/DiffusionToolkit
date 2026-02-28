@@ -3,6 +3,11 @@ using SQLite;
 
 namespace Diffusion.Database;
 
+public class PathResult
+{
+    public string? Path { get; set; }
+}
+
 /// <summary>
 /// Data store for querying the external CivitAI extension database
 /// </summary>
@@ -90,6 +95,92 @@ public class CivitAiExtensionDataStore
         {
             _isAvailable = false;
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Searches for paths matching CivitAI filter criteria.
+    /// Returns paths from Image2 that match the given conditions.
+    /// Text matching:
+    ///   - Empty = has any non-empty data
+    ///   - "=value" = exact match
+    ///   - "value" = contains (auto-wrapped with %)
+    ///   - "val*ue" = custom wildcard pattern (* → %)
+    /// </summary>
+    public List<string> SearchPaths(bool? hasAnyData, string? loraRiforgiati, string? loraInForge, string? reforgedTags)
+    {
+        if (!_isAvailable)
+            return new List<string>();
+
+        try
+        {
+            using var connection = OpenReadOnlyConnection();
+
+            var conditions = new List<string>();
+            var parameters = new List<object>();
+
+            AddFieldCondition(conditions, parameters, "lora_riforgiati", loraRiforgiati);
+            AddFieldCondition(conditions, parameters, "lora_in_forge", loraInForge);
+            AddFieldCondition(conditions, parameters, "reforged_tags", reforgedTags);
+
+            var where = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
+            var sql = $"SELECT Path FROM Image2{where}";
+
+            var results = connection.Query<PathResult>(sql, parameters.ToArray());
+            return results.Select(r => r.Path).Where(p => p != null).ToList()!;
+        }
+        catch (Exception)
+        {
+            return new List<string>();
+        }
+    }
+
+    private static void AddFieldCondition(List<string> conditions, List<object> parameters, string column, string? value)
+    {
+        if (value == null) return;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            // Empty = has any non-empty data
+            conditions.Add($"({column} IS NOT NULL AND {column} != '')");
+        }
+        else if (value.StartsWith("="))
+        {
+            // Exact match: =PERFECT matches only "PERFECT"
+            conditions.Add($"({column} = ?)");
+            parameters.Add(value.Substring(1));
+        }
+        else if (value.Contains('*'))
+        {
+            // Custom wildcard pattern: * → %
+            conditions.Add($"({column} LIKE ?)");
+            parameters.Add(value.Replace("*", "%"));
+        }
+        else
+        {
+            // Default: contains search (auto-wrap with %)
+            conditions.Add($"({column} LIKE ?)");
+            parameters.Add($"%{value}%");
+        }
+    }
+
+    /// <summary>
+    /// Returns all paths in the external database (for "has CivitAI data" filter)
+    /// </summary>
+    public List<string> GetAllPaths()
+    {
+        if (!_isAvailable)
+            return new List<string>();
+
+        try
+        {
+            using var connection = OpenReadOnlyConnection();
+            var results = connection.Query<PathResult>("SELECT Path FROM Image2");
+            return results.Select(r => r.Path).Where(p => p != null).ToList()!;
+        }
+        catch (Exception)
+        {
+            return new List<string>();
         }
     }
 

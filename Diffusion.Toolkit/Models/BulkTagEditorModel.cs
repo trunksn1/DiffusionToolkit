@@ -23,6 +23,12 @@ public class BulkTagEditorModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public bool HasChanges
+    {
+        get;
+        set => SetField(ref field, value, false);
+    }
+
     public ICommand OkCommand { get; set; }
     public ICommand CancelCommand { get; set; }
     public ICommand EscapeCommand { get; set; }

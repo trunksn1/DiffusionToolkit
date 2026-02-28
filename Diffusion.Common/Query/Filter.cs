@@ -58,6 +58,30 @@ public class Filter
     public bool UsePath { get; set; }
     public string Path { get; set; }
 
+    public bool UsePathEx { get; set; }
+    public string PathEx { get; set; }
+
+    public bool UseTag { get; set; }
+    public string Tag { get; set; }
+
+    public bool UseTagEx { get; set; }
+    public string TagEx { get; set; }
+
+    public bool UseHasTag { get; set; }
+    public bool HasTag { get; set; }
+
+    public bool UseCivitaiLink { get; set; }
+    public bool CivitaiLink { get; set; }
+
+    public bool UseCivitaiLoraRiforgiati { get; set; }
+    public string CivitaiLoraRiforgiati { get; set; }
+
+    public bool UseCivitaiLoraInForge { get; set; }
+    public string CivitaiLoraInForge { get; set; }
+
+    public bool UseCivitaiReforgedTags { get; set; }
+    public string CivitaiReforgedTags { get; set; }
+
     public bool UseCreationDate { get; set; }
     public DateTime? Start { get; set; }
     public DateTime? End { get; set; }
@@ -93,6 +117,14 @@ public class Filter
                             NoAestheticScore ||
                             UseAestheticScore ||
                             UsePath ||
+                            UsePathEx ||
+                            UseTag ||
+                            UseTagEx ||
+                            UseHasTag ||
+                            UseCivitaiLink ||
+                            UseCivitaiLoraRiforgiati ||
+                            UseCivitaiLoraInForge ||
+                            UseCivitaiReforgedTags ||
                             UseCreationDate ||
                             UseHyperNet ||
                             UseHyperNetStr ||

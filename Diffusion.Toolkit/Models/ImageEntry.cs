@@ -148,6 +148,12 @@ public class ImageEntry : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public string? TagIconIds
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public bool IsEmpty
     {
         get;
@@ -195,6 +201,7 @@ public class ImageEntry : BaseNotify
         AlbumCount = 0;
         Albums = Enumerable.Empty<string>();
         HasError = false;
+        TagIconIds = null;
         Unavailable = false;
         LoadState = LoadState.Loaded;
         Dispatcher = Dispatcher;

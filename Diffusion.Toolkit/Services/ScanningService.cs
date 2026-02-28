@@ -267,7 +267,8 @@ public class ScanningService
             WorkflowId = file.WorkflowId,
             HasError = file.HasError,
             Type = file.Type,
-            Hash = file.Hash
+            Hash = file.Hash,
+            PerceptualHash = file.PerceptualHash
         };
 
         if (storeMetadata)

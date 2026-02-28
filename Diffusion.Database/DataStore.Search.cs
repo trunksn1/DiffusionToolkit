@@ -198,13 +198,22 @@ namespace Diffusion.Database
 
             var q = QueryCombiner.ParseEx(options);
 
+            var query = q.Query;
+            var bindings = q.Bindings;
+
+            // Apply CivitAI extension filters by querying external DB for matching paths
+            if (!options.Filter.IsEmpty)
+            {
+                ApplyCivitaiFilters(options.Filter, ref query, ref bindings);
+            }
+
             var whereClause = QueryCombiner.GetInitialWhereClause("main", options);
 
-            var join = $"INNER JOIN ({q.Query}) sub ON main.Id = sub.Id";
+            var join = $"INNER JOIN ({query}) sub ON main.Id = sub.Id";
 
             var where = whereClause.Length > 0 ? $"WHERE {whereClause}" : "";
 
-            var countSize = db.Query<CountSize>($"SELECT COUNT(*) AS Total, SUM(FileSize) AS Size FROM Image main {join} {where}", q.Bindings.ToArray());
+            var countSize = db.Query<CountSize>($"SELECT COUNT(*) AS Total, SUM(FileSize) AS Size FROM Image main {join} {where}", bindings.ToArray());
 
             return countSize[0];
         }
@@ -224,7 +233,7 @@ namespace Diffusion.Database
 
             var selectedIds = InsertIds(db, "SelectedIds", ids);
 
-            return db.Query<ImageView>($"SELECT main.Id, Path, {columns}, (SELECT COUNT(1) FROM AlbumImage WHERE ImageId = main.Id) AS AlbumCount FROM Image main WHERE Id IN {selectedIds}");
+            return db.Query<ImageView>($"SELECT main.Id, Path, {columns}, (SELECT COUNT(1) FROM AlbumImage WHERE ImageId = main.Id) AS AlbumCount {tagIconSubquery} FROM Image main WHERE Id IN {selectedIds}");
         }
 
         public IEnumerable<Album> GetImageAlbums(int id)
@@ -349,7 +358,7 @@ namespace Diffusion.Database
 
             var (sortField, sortDir) = sorting;
 
-            var images = db.Query<ImageView>($"SELECT main.Id, Path, {columns}, (SELECT COUNT(1) FROM AlbumImage WHERE ImageId = main.Id) AS AlbumCount FROM Image main {join} {where} ORDER BY {sortField} {sortDir} {page}", bindings.ToArray());
+            var images = db.Query<ImageView>($"SELECT main.Id, Path, {columns}, (SELECT COUNT(1) FROM AlbumImage WHERE ImageId = main.Id) AS AlbumCount {tagIconSubquery} FROM Image main {join} {where} ORDER BY {sortField} {sortDir} {page}", bindings.ToArray());
 
             foreach (var image in images)
             {
@@ -366,6 +375,7 @@ namespace Diffusion.Database
                       "AestheticScore, HyperNetwork, HyperNetworkStrength, ClipSkip, ENSD, FileSize, NoMetadata, HasError";
 
         const string columns = "Favorite, ForDeletion, Rating, AestheticScore, CreatedDate, NSFW, HasError";
+        const string tagIconSubquery = ",(SELECT GROUP_CONCAT(TagId) FROM ImageTag WHERE ImageId = main.Id) AS TagIconIds";
 
         public IEnumerable<ImageView> SearchEx(QueryOptions options, Sorting sorting, Paging? paging = null)
         {
@@ -373,13 +383,20 @@ namespace Diffusion.Database
 
             var q = QueryCombiner.ParseEx(options);
 
+            var query = q.Query;
+            var bindings = q.Bindings;
+
+            // Apply CivitAI extension filters by querying external DB for matching paths
+            if (!options.Filter.IsEmpty)
+            {
+                ApplyCivitaiFilters(options.Filter, ref query, ref bindings);
+            }
+
             var whereClause = QueryCombiner.GetInitialWhereClause("main", options);
 
-            var join = $"INNER JOIN ({q.Query}) sub ON main.Id = sub.Id";
+            var join = $"INNER JOIN ({query}) sub ON main.Id = sub.Id";
 
             var where = whereClause.Length > 0 ? $"WHERE {whereClause}" : "";
-
-            var bindings = q.Bindings;
 
             var page = "";
 
@@ -391,7 +408,7 @@ namespace Diffusion.Database
 
             var (sortField, sortDir) = sorting;
 
-            var images = db.Query<ImageView>($"SELECT main.Id, Path, {columns}, (SELECT COUNT(1) FROM AlbumImage WHERE ImageId = main.Id) AS AlbumCount FROM Image main {join} {where} ORDER BY {sortField} {sortDir} {page}", bindings.ToArray());
+            var images = db.Query<ImageView>($"SELECT main.Id, Path, {columns}, (SELECT COUNT(1) FROM AlbumImage WHERE ImageId = main.Id) AS AlbumCount {tagIconSubquery} FROM Image main {join} {where} ORDER BY {sortField} {sortDir} {page}", bindings.ToArray());
 
             foreach (var image in images)
             {
@@ -407,13 +424,17 @@ namespace Diffusion.Database
 
             var q = QueryCombiner.Filter(filter, options);
 
+            var query = q.Query;
+            var bindings = q.Bindings;
+
+            // Apply CivitAI extension filters by querying external DB for matching paths
+            ApplyCivitaiFilters(filter, ref query, ref bindings);
+
             var whereClause = QueryCombiner.GetInitialWhereClause("main", options);
 
-            var join = $"INNER JOIN ({q.Query}) sub ON main.Id = sub.Id";
+            var join = $"INNER JOIN ({query}) sub ON main.Id = sub.Id";
 
             var where = whereClause.Length > 0 ? $"WHERE {whereClause}" : "";
-
-            var bindings = q.Bindings;
 
             var page = "";
 
@@ -425,7 +446,7 @@ namespace Diffusion.Database
 
             var (sortField, sortDir) = sorting;
 
-            var images = db.Query<ImageView>($"SELECT main.Id, Path, {columns}, (SELECT COUNT(1) FROM AlbumImage WHERE ImageId = main.Id) AS AlbumCount FROM Image main {join} {where} ORDER BY {sortField} {sortDir} {page}", bindings.ToArray());
+            var images = db.Query<ImageView>($"SELECT main.Id, Path, {columns}, (SELECT COUNT(1) FROM AlbumImage WHERE ImageId = main.Id) AS AlbumCount {tagIconSubquery} FROM Image main {join} {where} ORDER BY {sortField} {sortDir} {page}", bindings.ToArray());
 
             foreach (var image in images)
             {
@@ -615,6 +636,64 @@ namespace Diffusion.Database
             db.Close();
         }
 
+
+        private void ApplyCivitaiFilters(Filter filter, ref string query, ref IEnumerable<object> bindings)
+        {
+            if (_civitAiExtensionDataStore == null || !_civitAiExtensionDataStore.IsAvailable)
+                return;
+
+            var hasCivitaiFilter = filter.UseCivitaiLink || filter.UseCivitaiLoraRiforgiati ||
+                                   filter.UseCivitaiLoraInForge || filter.UseCivitaiReforgedTags;
+
+            if (!hasCivitaiFilter)
+                return;
+
+            // Query external DB for matching paths
+            string? loraRiforgiati = filter.UseCivitaiLoraRiforgiati ? (filter.CivitaiLoraRiforgiati ?? "") : null;
+            string? loraInForge = filter.UseCivitaiLoraInForge ? (filter.CivitaiLoraInForge ?? "") : null;
+            string? reforgedTags = filter.UseCivitaiReforgedTags ? (filter.CivitaiReforgedTags ?? "") : null;
+
+            List<string> matchingPaths;
+
+            if (filter.UseCivitaiLink && !filter.CivitaiLink)
+            {
+                // "Does NOT have CivitAI data" — get all civitai paths, then EXCEPT them
+                var civitaiPaths = _civitAiExtensionDataStore.GetAllPaths();
+                if (civitaiPaths.Count > 0)
+                {
+                    var placeholders = string.Join(",", civitaiPaths.Select(_ => "?"));
+                    query = $"SELECT Id FROM ({query}) EXCEPT SELECT m1.Id FROM Image m1 WHERE m1.Path IN ({placeholders})";
+                    bindings = bindings.Concat(civitaiPaths.Cast<object>());
+                }
+                return;
+            }
+
+            // For inclusion filters, query external DB with combined criteria
+            if (filter.UseCivitaiLink && filter.CivitaiLink && loraRiforgiati == null && loraInForge == null && reforgedTags == null)
+            {
+                // "Has CivitAI data" without other criteria
+                matchingPaths = _civitAiExtensionDataStore.GetAllPaths();
+            }
+            else
+            {
+                matchingPaths = _civitAiExtensionDataStore.SearchPaths(
+                    filter.UseCivitaiLink && filter.CivitaiLink ? true : null,
+                    loraRiforgiati, loraInForge, reforgedTags);
+            }
+
+            if (matchingPaths.Count > 0)
+            {
+                // INTERSECT with images whose paths are in the matching set
+                var placeholders = string.Join(",", matchingPaths.Select(_ => "?"));
+                query = $"SELECT Id FROM ({query}) INTERSECT SELECT m1.Id FROM Image m1 WHERE m1.Path IN ({placeholders})";
+                bindings = bindings.Concat(matchingPaths.Cast<object>());
+            }
+            else
+            {
+                // No matches found — return empty result
+                query = $"SELECT Id FROM ({query}) INTERSECT SELECT m1.Id FROM Image m1 WHERE 0 = 1";
+            }
+        }
 
         private static int HammingDistance(String str1,
             String str2)

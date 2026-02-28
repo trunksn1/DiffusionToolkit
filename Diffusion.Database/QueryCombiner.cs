@@ -225,6 +225,27 @@ public static class QueryCombiner
             bindings = bindings.Concat(new[] { (object)options.Folder! });
         }
 
+        if (!string.IsNullOrEmpty(options.CustomWhereClause))
+        {
+            // Smart album custom WHERE clause uses named parameters (@p0, @p1, etc.)
+            // Convert to positional ? parameters for SQLite
+            var customClause = options.CustomWhereClause;
+            var customBindings = new List<object>();
+
+            if (options.CustomWhereParameters != null)
+            {
+                // Sort parameters by name to ensure consistent ordering
+                foreach (var p in options.CustomWhereParameters.OrderBy(p => p.Key))
+                {
+                    customClause = customClause.Replace(p.Key, "?");
+                    customBindings.Add(p.Value);
+                }
+            }
+
+            filters.Add($"SELECT m1.Id FROM Image m1 WHERE {customClause}");
+            bindings = bindings.Concat(customBindings);
+        }
+
         if (filters.Any())
         {
             query = $"SELECT Id FROM ({query}) INTERSECT " + string.Join(" INTERSECT ", filters);

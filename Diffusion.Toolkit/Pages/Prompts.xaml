@@ -137,6 +137,18 @@
                     </DataGrid>
                 </Grid>
             </TabItem>
+            <TabItem Header="Templates">
+                <Grid Height="{Binding ElementName=VirtualGrid,Path=ActualHeight}" Width="{Binding ElementName=VirtualGrid,Path=ActualWidth}">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock TextAlignment="Center" FontSize="14" Margin="0,0,0,10">
+                            Save and manage reusable prompt templates.
+                        </TextBlock>
+                        <Button Click="OpenPromptLibrary_OnClick" Padding="20,10" HorizontalAlignment="Center" FontSize="14">
+                            Open Prompt Library
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
         </TabControl>
     </Grid>
 </pages:NavigationPage>

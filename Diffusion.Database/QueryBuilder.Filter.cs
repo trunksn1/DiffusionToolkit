@@ -56,6 +56,10 @@ namespace Diffusion.Database
             FilterNoMetadata(filter, conditions);
             FilterInAlbum(filter, conditions);
             FilterUnavailable(filter, conditions);
+            FilterPathEx(filter, conditions);
+            FilterTag(filter, conditions);
+            FilterTagEx(filter, conditions);
+            FilterHasTag(filter, conditions);
 
             //FilterNegativePrompt(filter, conditions);
             //FilterPrompt(filter, conditions);
@@ -172,6 +176,57 @@ namespace Diffusion.Database
                     var value = filter.Path;
 
                     conditions.Add(new KeyValuePair<string, object>("(m1.Path LIKE ?)", value.Replace("*", "%")));
+                }
+            }
+        }
+
+        private static void FilterPathEx(Filter filter, List<KeyValuePair<string, object>> conditions)
+        {
+            if (filter.UsePathEx)
+            {
+                if (!string.IsNullOrWhiteSpace(filter.PathEx))
+                {
+                    var value = filter.PathEx;
+                    conditions.Add(new KeyValuePair<string, object>("(m1.Path NOT LIKE ?)", value.Replace("*", "%")));
+                }
+            }
+        }
+
+        private static void FilterTag(Filter filter, List<KeyValuePair<string, object>> conditions)
+        {
+            if (filter.UseTag)
+            {
+                if (!string.IsNullOrWhiteSpace(filter.Tag))
+                {
+                    var value = filter.Tag;
+                    conditions.Add(new KeyValuePair<string, object>("EXISTS (SELECT 1 FROM ImageTag it INNER JOIN Tag t ON t.Id = it.TagId WHERE it.ImageId = m1.Id AND t.Name LIKE ?)", value.Replace("*", "%")));
+                }
+            }
+        }
+
+        private static void FilterTagEx(Filter filter, List<KeyValuePair<string, object>> conditions)
+        {
+            if (filter.UseTagEx)
+            {
+                if (!string.IsNullOrWhiteSpace(filter.TagEx))
+                {
+                    var value = filter.TagEx;
+                    conditions.Add(new KeyValuePair<string, object>("NOT EXISTS (SELECT 1 FROM ImageTag it INNER JOIN Tag t ON t.Id = it.TagId WHERE it.ImageId = m1.Id AND t.Name LIKE ?)", value.Replace("*", "%")));
+                }
+            }
+        }
+
+        private static void FilterHasTag(Filter filter, List<KeyValuePair<string, object>> conditions)
+        {
+            if (filter.UseHasTag)
+            {
+                if (filter.HasTag)
+                {
+                    conditions.Add(new KeyValuePair<string, object>("(SELECT COUNT(1) FROM ImageTag WHERE ImageId = m1.Id) > 0", null));
+                }
+                else
+                {
+                    conditions.Add(new KeyValuePair<string, object>("(SELECT COUNT(1) FROM ImageTag WHERE ImageId = m1.Id) = 0", null));
                 }
             }
         }

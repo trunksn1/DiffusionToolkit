@@ -25,7 +25,21 @@ namespace Diffusion.Toolkit
             _model.EscapeCommand = new RelayCommand<object>(o => Escape());
             _model.AddTagCommand = new RelayCommand<object>(o => AddNewTag());
 
+            SubscribeToTagChanges();
+
             DataContext = _model;
+        }
+
+        private void SubscribeToTagChanges()
+        {
+            foreach (var tag in _model.Tags)
+                tag.PropertyChanged += OnTagPropertyChanged;
+        }
+
+        private void OnTagPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(BulkImageTagView.IsChecked))
+                _model.HasChanges = _model.Tags.Any(t => t.IsChecked != t.OriginalState);
         }
 
         private void AddNewTag()
@@ -44,14 +58,16 @@ namespace Diffusion.Toolkit
             var newTag = allTags.FirstOrDefault(t => t.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase));
             if (newTag != null)
             {
-                _model.Tags.Add(new BulkImageTagView
+                var view = new BulkImageTagView
                 {
                     Id = newTag.Id,
                     Name = newTag.Name,
                     IsChecked = false,
                     OriginalState = false,
                     IsReadOnly = false,
-                });
+                };
+                view.PropertyChanged += OnTagPropertyChanged;
+                _model.Tags.Add(view);
             }
 
             _model.NewTagText = string.Empty;
@@ -89,20 +105,20 @@ namespace Diffusion.Toolkit
         {
             foreach (var tag in _model.Tags)
             {
-                if (tag.IsReadOnly) continue;
                 if (tag.IsChecked == tag.OriginalState) continue;
 
-                if (tag.IsChecked == true && tag.OriginalState == false)
+                if (tag.IsChecked == true)
                 {
                     ServiceLocator.DataStore.AddImagesTag(_imageIds, tag.Id);
                 }
-                else if (tag.IsChecked == false && tag.OriginalState == true)
+                else if (tag.IsChecked == false)
                 {
                     ServiceLocator.DataStore.RemoveImagesTag(_imageIds, tag.Id);
                 }
             }
 
             ServiceLocator.TagService.LoadTags?.Invoke();
+            ServiceLocator.TagService.RefreshTagIcons?.Invoke(_imageIds);
         }
     }
 }

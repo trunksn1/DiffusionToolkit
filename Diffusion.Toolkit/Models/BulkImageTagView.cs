@@ -1,3 +1,5 @@
+using System.Windows.Media.Imaging;
+
 namespace Diffusion.Toolkit.Models;
 
 public class BulkImageTagView : BaseNotify
@@ -10,6 +12,8 @@ public class BulkImageTagView : BaseNotify
     public bool IsReadOnly { get; set; }
 
     public bool IsEnabled => !IsReadOnly;
+
+    public BitmapImage? IconPreview { get; set; }
 
     public bool? IsChecked
     {

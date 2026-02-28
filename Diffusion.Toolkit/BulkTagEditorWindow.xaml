@@ -5,6 +5,7 @@
                   xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                   xmlns:local="clr-namespace:Diffusion.Toolkit"
                   xmlns:models="clr-namespace:Diffusion.Toolkit.Models"
+                  xmlns:converters="clr-namespace:Diffusion.Toolkit.Converters"
                   mc:Ignorable="d"
                   d:DataContext="{d:DesignInstance models:BulkTagEditorModel, IsDesignTimeCreatable = True}"
                   WindowStartupLocation="CenterOwner"
@@ -18,9 +19,14 @@
         <KeyBinding Key="Escape" Command="{Binding EscapeCommand}"/>
     </Window.InputBindings>
     <Grid Margin="0,20,0,0">
+        <Grid.Resources>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <converters:NullToVisibilityConverter x:Key="NullToVisibility"/>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -32,11 +38,15 @@
                   ScrollViewer.VerticalScrollBarVisibility="Auto">
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <CheckBox Content="{Binding Name}"
-                              IsChecked="{Binding IsChecked}"
-                              IsEnabled="{Binding IsEnabled}"
-                              IsThreeState="{Binding IsReadOnly}"
-                              Margin="2"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="{Binding IconPreview}" Width="16" Height="16" Margin="2,0"
+                               Visibility="{Binding IconPreview, Converter={StaticResource NullToVisibility}}"/>
+                        <CheckBox IsChecked="{Binding IsChecked}"
+                                  IsEnabled="{Binding IsEnabled}"
+                                  Margin="2">
+                            <TextBlock Text="{Binding Name}"/>
+                        </CheckBox>
+                    </StackPanel>
                 </DataTemplate>
             </ListView.ItemTemplate>
             <ListView.ItemContainerStyle>
@@ -59,7 +69,12 @@
                     Command="{Binding AddTagCommand}" ToolTip="Add new tag"/>
         </Grid>
 
-        <Grid Grid.Row="3" Margin="4,4">
+        <TextBlock Grid.Row="3" Margin="8,2" FontStyle="Italic"
+                   Foreground="Orange"
+                   Text="* Unsaved changes"
+                   Visibility="{Binding HasChanges, Converter={StaticResource BoolToVis}}"/>
+
+        <Grid Grid.Row="4" Margin="4,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition/>
                 <ColumnDefinition/>

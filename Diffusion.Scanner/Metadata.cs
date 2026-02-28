@@ -608,6 +608,13 @@ public class Metadata
 
         fileParameters.Type = imageType;
 
+        // Compute perceptual hash for images (not videos)
+        if (fileType != FileType.MP4)
+        {
+            stream.Seek(0, SeekOrigin.Begin);
+            fileParameters.PerceptualHash = PerceptualHashHelper.ComputeDHash(stream);
+        }
+
         return fileParameters;
     }
 

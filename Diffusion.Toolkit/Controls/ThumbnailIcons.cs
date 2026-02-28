@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Diffusion.Toolkit.Models;
+using Diffusion.Toolkit.Services;
 using Diffusion.Toolkit.Themes;
 
 namespace Diffusion.Toolkit.Controls;
@@ -42,6 +44,7 @@ public class ThumbnailIcons : FrameworkElement
                     case nameof(ImageEntry.ForDeletion):
                     case nameof(ImageEntry.Favorite):
                     case nameof(ImageEntry.Rating):
+                    case nameof(ImageEntry.TagIconIds):
                         var thumb = d as ThumbnailIcons;
                         thumb.InvalidateVisual();
                         break;
@@ -175,6 +178,49 @@ public class ThumbnailIcons : FrameworkElement
             x += xOffset;
         }
 
+        if (!string.IsNullOrEmpty(Data.TagIconIds))
+        {
+            var tagIdStrings = Data.TagIconIds.Split(',');
+            var customIcons = new System.Collections.Generic.List<TagIcon>();
+
+            foreach (var idStr in tagIdStrings)
+            {
+                if (int.TryParse(idStr.Trim(), out var tagId))
+                {
+                    var icon = TagIconCache.GetTagIcon(tagId);
+                    if (icon != null && customIcons.Count < 3)
+                        customIcons.Add(icon);
+                }
+            }
+
+            if (customIcons.Count > 0)
+            {
+                foreach (var icon in customIcons)
+                {
+                    if (icon.IsEmoji)
+                    {
+                        var emojiBrush = TagIconCache.BrushFromHex(icon.Color);
+                        var emojiTypeface = new Typeface(new FontFamily("Segoe UI Emoji"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+                        var emojiText = new FormattedText(icon.Emoji!, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, emojiTypeface, 16, emojiBrush, null, TextFormattingMode.Display, 92);
+                        drawingContext.DrawText(emojiText, new Point(x + 2, y + 2));
+                    }
+                    else if (icon.Bitmap != null)
+                    {
+                        drawingContext.DrawImage(icon.Bitmap, new Rect(new Point(x, y), new Size(24, 24)));
+                    }
+                    x += xOffset;
+                }
+            }
+            else
+            {
+                var genericIcon = TagIconCache.GetGenericTagIcon();
+                if (genericIcon != null)
+                {
+                    drawingContext.DrawImage(genericIcon, new Rect(new Point(x, y), new Size(24, 24)));
+                    x += xOffset;
+                }
+            }
+        }
 
     }
 }

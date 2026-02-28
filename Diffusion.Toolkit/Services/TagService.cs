@@ -10,6 +10,12 @@ public class TagService
 {
     public Action LoadTags;
 
+    /// <summary>
+    /// Called after tag assignments or icon changes to update visible thumbnails.
+    /// Accepts a list of affected image IDs (null = refresh all visible).
+    /// </summary>
+    public Action<IEnumerable<int>?> RefreshTagIcons;
+
     public void CreateTag(string name)
     {
         ServiceLocator.DataStore.CreateTag(name);
@@ -23,6 +29,13 @@ public class TagService
     public void RemoveTag(int id, string name)
     {
         ServiceLocator.DataStore.UpdateTag(id, name);
+    }
+
+    public void UpdateTagIcon(int id, string? icon)
+    {
+        ServiceLocator.DataStore.UpdateTagIcon(id, icon);
+        TagIconCache.RefreshTagMappings();
+        RefreshTagIcons?.Invoke(null); // null = refresh all visible
     }
 
     public ObservableCollection<TagFilterView> GetTagFilterViews()
@@ -59,7 +72,7 @@ public class TagService
             else if (count > 0)
             {
                 isChecked = null;
-                isReadOnly = true;
+                isReadOnly = false;
             }
             else
             {
@@ -74,6 +87,7 @@ public class TagService
                 IsChecked = isChecked,
                 OriginalState = isChecked,
                 IsReadOnly = isReadOnly,
+                IconPreview = TagIconCache.ResolveIcon(tag.Icon),
             };
         }));
     }
@@ -98,7 +112,7 @@ public class TagService
                 {
                     if (args.PropertyName == nameof(ImageTagView.IsTicked))
                     {
-                        var ids = ServiceLocator.MainModel.SelectedImages.Select(d => d.Id);
+                        var ids = ServiceLocator.MainModel.SelectedImages.Select(d => d.Id).ToList();
 
                         if (imageTag.IsTicked)
                         {
@@ -110,6 +124,7 @@ public class TagService
                         }
 
                         LoadTags?.Invoke();
+                        RefreshTagIcons?.Invoke(ids);
                     }
                 }
                 else
@@ -126,6 +141,7 @@ public class TagService
                         }
 
                         LoadTags?.Invoke();
+                        RefreshTagIcons?.Invoke(new[] { imageModelId });
                     }
                 }
 

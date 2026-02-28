@@ -235,7 +235,8 @@ namespace Diffusion.Toolkit.Pages
                     FileName = Path.GetFileName(file.Path),
                     NSFW = file.NSFW,
                     AlbumCount = file.AlbumCount,
-                    EntryType = EntryType.File
+                    EntryType = EntryType.File,
+                    TagIconIds = file.TagIconIds
                 };
 
                 images.Add(imageEntry);
@@ -294,6 +295,7 @@ namespace Diffusion.Toolkit.Pages
                         dest.AlbumCount = src.AlbumCount;
                         dest.Albums = src.Albums;
                         dest.HasError = src.HasError;
+                        dest.TagIconIds = src.TagIconIds;
 
                         dest.LoadState = LoadState.Unloaded;
                         dest.Dispatcher = Dispatcher;
@@ -327,6 +329,8 @@ namespace Diffusion.Toolkit.Pages
             ThumbnailListView.PageSize = pageSize;
         }
 
+        public IEnumerable<ImageEntry> PromptsResultImages => _model.PromptsResults.Images ?? Enumerable.Empty<ImageEntry>();
+
         //public void RefreshThumbnails()
         //{
         //    if (_model.PromptsResults.Images != null)
@@ -341,6 +345,13 @@ namespace Diffusion.Toolkit.Pages
         private void Selector_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             Task.Run(LoadImages);
+        }
+
+        private void OpenPromptLibrary_OnClick(object sender, System.Windows.RoutedEventArgs e)
+        {
+            var window = new PromptLibraryWindow();
+            window.Owner = System.Windows.Window.GetWindow(this);
+            window.Show();
         }
     }
 }

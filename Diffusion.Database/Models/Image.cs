@@ -60,6 +60,7 @@ public class Image
     public string? WorkflowId { get; set; }
     public bool HasError { get; set; }
     public string? Hash { get; set; }
+    public long? PerceptualHash { get; set; }
     [UserDefined]
     public DateTime? ViewedDate { get; set; }
     [UserDefined]
@@ -80,4 +81,5 @@ public class ImageView
     public bool NSFW { get; set; }
     public int  AlbumCount { get; set; }
     public bool HasError { get; set; }
+    public string? TagIconIds { get; set; }
 }

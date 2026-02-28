@@ -776,9 +776,12 @@ namespace Diffusion.Toolkit.Pages
                 long size = 0;
 
 
-                var albums = _model.MainModel.Albums.Where(d => d.IsTicked).Select(d => d.Id).ToList();
-                var models = _model.MainModel.ImageModels.Where(d => d.IsTicked).Select(d => new ModelInfo { Name = d.Name, Hash = d.Hash, HashV2 = d.Hashv2 }).ToList();
-                var tags = _model.MainModel.Tags.Where(d => d.IsTicked).Select(d => d.Id).ToList();
+                var albumsSource = _model.MainModel.Albums;
+                var modelsSource = _model.MainModel.ImageModels;
+                var tagsSource = _model.MainModel.Tags;
+                var albums = albumsSource != null ? albumsSource.Where(d => d.IsTicked).Select(d => d.Id).ToList() : new List<int>();
+                var models = modelsSource != null ? modelsSource.Where(d => d.IsTicked).Select(d => new ModelInfo { Name = d.Name, Hash = d.Hash, HashV2 = d.Hashv2 }).ToList() : new List<ModelInfo>();
+                var tags = tagsSource != null ? tagsSource.Where(d => d.IsTicked).Select(d => d.Id).ToList() : new List<int>();
 
                 if (queryOptions != null)
                 {
@@ -786,9 +789,12 @@ namespace Diffusion.Toolkit.Pages
 
                     ServiceLocator.MainModel.SelectedAlbumsCount = queryOptions.AlbumIds.Count;
 
-                    foreach (var album in ServiceLocator.MainModel.Albums)
+                    if (ServiceLocator.MainModel.Albums != null)
                     {
-                        album.IsTicked = queryOptions.AlbumIds.Contains(album.Id);
+                        foreach (var album in ServiceLocator.MainModel.Albums)
+                        {
+                            album.IsTicked = queryOptions.AlbumIds.Contains(album.Id);
+                        }
                     }
 
 
@@ -1461,7 +1467,8 @@ namespace Diffusion.Toolkit.Pages
                     EntryType = EntryType.File,
                     AlbumCount = file.AlbumCount,
                     Dispatcher = Dispatcher,
-                    HasError = file.HasError
+                    HasError = file.HasError,
+                    TagIconIds = file.TagIconIds
                 };
 
                 images.Add(imageEntry);
@@ -1561,6 +1568,7 @@ namespace Diffusion.Toolkit.Pages
                     dest.AlbumCount = src.AlbumCount;
                     dest.Albums = src.Albums;
                     dest.HasError = src.HasError;
+                    dest.TagIconIds = src.TagIconIds;
                     dest.Unavailable = src.Unavailable;
                     dest.LoadState = LoadState.Unloaded;
                     dest.Dispatcher = Dispatcher;
@@ -1617,6 +1625,7 @@ namespace Diffusion.Toolkit.Pages
                     dest.AlbumCount = 0;
                     dest.Albums = Enumerable.Empty<string>();
                     dest.HasError = false;
+                    dest.TagIconIds = null;
                     dest.Unavailable = false;
                     dest.LoadState = LoadState.Loaded;
                     dest.Dispatcher = Dispatcher;
@@ -1657,6 +1666,7 @@ namespace Diffusion.Toolkit.Pages
                     dest.AlbumCount = src.AlbumCount;
                     dest.Albums = src.Albums;
                     dest.HasError = src.HasError;
+                    dest.TagIconIds = src.TagIconIds;
                     dest.Unavailable = !File.Exists(src.Path);
                     dest.LoadState = LoadState.Unloaded;
                     dest.Dispatcher = Dispatcher;
@@ -2052,6 +2062,98 @@ namespace Diffusion.Toolkit.Pages
         public void SetQuery(string queryInputText)
         {
             _model.SearchText = queryInputText;
+        }
+
+        private void ManageSmartAlbums_OnClick(object sender, RoutedEventArgs e)
+        {
+            var window = new SmartAlbumEditorWindow();
+            window.Owner = Window.GetWindow(this);
+            window.ShowDialog();
+            LoadSmartAlbums();
+        }
+
+        private void SmartAlbum_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: SmartAlbumViewModel smartAlbum })
+            {
+                try
+                {
+                    var rules = SmartAlbumEvaluator.DeserializeRules(smartAlbum.RulesJson);
+                    var (whereClause, parameters) = SmartAlbumEvaluator.BuildQuery(rules, smartAlbum.MatchAll);
+
+                    SetView("images", smartAlbum.Name);
+
+                    // Build QueryOptions with the smart album filter injected
+                    var queryOptions = new QueryOptions
+                    {
+                        HideNSFW = _model.MainModel.HideNSFW,
+                        HideDeleted = _model.MainModel.HideDeleted,
+                        HideUnavailable = _model.MainModel.HideUnavailable,
+                        AlbumIds = new List<int>(),
+                        Models = new List<ModelInfo>(),
+                        TagIds = new List<int>(),
+                        CustomWhereClause = whereClause,
+                        CustomWhereParameters = parameters
+                    };
+
+                    SearchImages(queryOptions);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error evaluating smart album: {ex.Message}", "Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void EditSmartAlbum_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem { DataContext: SmartAlbumViewModel smartAlbum })
+            {
+                var window = new SmartAlbumEditorWindow();
+                window.Owner = Window.GetWindow(this);
+                window.ShowDialog();
+                LoadSmartAlbums();
+            }
+        }
+
+        private void RefreshSmartAlbum_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem { DataContext: SmartAlbumViewModel smartAlbum })
+            {
+                var btn = new Button();
+                btn.Tag = smartAlbum;
+                SmartAlbum_OnClick(btn, e);
+            }
+        }
+
+        private void DeleteSmartAlbum_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem { DataContext: SmartAlbumViewModel smartAlbum })
+            {
+                var result = MessageBox.Show(
+                    $"Delete smart album '{smartAlbum.Name}'?",
+                    "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    ServiceLocator.DataStore!.DeleteSmartAlbum(smartAlbum.Id);
+                    LoadSmartAlbums();
+                }
+            }
+        }
+
+        public void LoadSmartAlbums()
+        {
+            var albums = ServiceLocator.DataStore!.GetAllSmartAlbums();
+            ServiceLocator.MainModel.SmartAlbums = new ObservableCollection<SmartAlbumViewModel>(
+                albums.Select(a => new SmartAlbumViewModel
+                {
+                    Id = a.Id,
+                    Name = a.Name,
+                    RulesJson = a.RulesJson,
+                    MatchAll = a.MatchAll
+                }));
         }
     }
 

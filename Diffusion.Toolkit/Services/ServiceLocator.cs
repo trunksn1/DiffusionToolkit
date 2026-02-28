@@ -169,6 +169,11 @@ public class ServiceLocator
         get { return field ??= new ComfyUIService(); }
     }
 
+    public static PerceptualHashService PerceptualHashService
+    {
+        get { return field ??= new PerceptualHashService(); }
+    }
+
     public static CivitAiExtensionDataStore? CivitAiExtensionDataStore => _civitAiExtensionDataStore;
 }
 

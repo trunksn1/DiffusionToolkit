@@ -235,29 +235,27 @@
                     <Grid  Background="Transparent" Grid.Row="0">
                         <TextBox></TextBox>
                     </Grid>
-                    <Grid  Background="Transparent" Grid.Row="1" ></Grid>
-                    <ScrollViewer Grid.Row="1" Background="Transparent" VerticalScrollBarVisibility="Auto">
-                        <ListView ItemsSource="{Binding ImageTags}">
-                            <ListView.ItemTemplate>
-                                <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsTicked}" Content="{Binding Name}"></CheckBox>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                            <ListView.ItemContainerStyle>
-                                <Style TargetType="{x:Type ListViewItem}">
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                    <Setter Property="Padding" Value="5"/>
-                                    <!-- Add a trigger to handle focus if a dotted outline remains -->
-                                    <Style.Triggers>
-                                        <Trigger Property="IsFocused" Value="True">
-                                            <Setter Property="BorderThickness" Value="0"/>
-                                            <!-- You might also need to set the focus visual style to null in more complex scenarios -->
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ListView.ItemContainerStyle>
-                        </ListView>
-                    </ScrollViewer>
+                    <ListView Grid.Row="1" Background="Transparent" ItemsSource="{Binding ImageTags}"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsTicked}">
+                                    <TextBlock Text="{Binding Name}"/>
+                                </CheckBox>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="{x:Type ListViewItem}">
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Padding" Value="5"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsFocused" Value="True">
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
                     <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>

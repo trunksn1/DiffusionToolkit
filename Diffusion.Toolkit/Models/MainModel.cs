@@ -452,7 +452,13 @@ public class MainModel : BaseNotify
         get;
         set => SetField(ref field, value);
     }
-    
+
+    public ObservableCollection<SmartAlbumViewModel> SmartAlbums
+    {
+        get;
+        set => SetField(ref field, value);
+    } = new();
+
     public ObservableCollection<TagFilterView> Tags
     {
         get;

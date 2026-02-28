@@ -280,6 +280,89 @@ namespace Diffusion.Toolkit
 
         }
 
+        private void DuplicateFinder_OnClick(object sender, RoutedEventArgs e)
+        {
+            var window = new DuplicateFinderWindow();
+            window.Owner = this;
+            window.Show();
+        }
+
+        private async void BackfillHashes_OnClick(object sender, RoutedEventArgs e)
+        {
+            var totalMissing = ServiceLocator.DataStore.CountImagesWithoutPerceptualHash();
+
+            if (totalMissing == 0)
+            {
+                MessageBox.Show("All images already have perceptual hashes computed.", "Backfill Perceptual Hashes",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"This will compute perceptual hashes for {totalMissing:N0} images that don't have one yet.\nThis may take a while for large libraries.\n\nContinue?",
+                "Backfill Perceptual Hashes", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            if (!await ServiceLocator.ProgressService.TryStartTask())
+                return;
+
+            try
+            {
+                ServiceLocator.ProgressService.InitializeProgress(totalMissing);
+                ServiceLocator.ProgressService.SetStatus($"Backfilling perceptual hashes: 0 of {totalMissing:N0}...");
+
+                var processed = await Task.Run(async () =>
+                {
+                    return await ServiceLocator.PerceptualHashService.BackfillHashes(
+                        (current, total) =>
+                        {
+                            ServiceLocator.ProgressService.SetProgress(current,
+                                "Backfilling perceptual hashes: {current} of {total}...");
+                        }, ServiceLocator.ProgressService.CancellationToken);
+                });
+
+                ServiceLocator.ProgressService.SetStatus($"Backfill complete: {processed:N0} hashes computed");
+                ServiceLocator.ToastService.Toast($"Computed {processed:N0} perceptual hashes", "Backfill Complete");
+            }
+            catch (OperationCanceledException)
+            {
+                ServiceLocator.ProgressService.SetStatus("Backfill cancelled");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error during backfill: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                ServiceLocator.ProgressService.ClearProgress();
+                ServiceLocator.ProgressService.CompleteTask();
+            }
+        }
+
+        private void PromptLibrary_OnClick(object sender, RoutedEventArgs e)
+        {
+            var window = new PromptLibraryWindow();
+            window.Owner = this;
+            window.Show();
+        }
+
+        private void TagManager_OnClick(object sender, RoutedEventArgs e)
+        {
+            var window = new TagManagerWindow();
+            window.Owner = this;
+            window.Show();
+        }
+
+        private void SmartAlbums_OnClick(object sender, RoutedEventArgs e)
+        {
+            var window = new SmartAlbumEditorWindow();
+            window.Owner = this;
+            window.Show();
+        }
+
         private void ToggleNavigationPane()
         {
             _model.Settings.NavigationSection.ToggleSection();
@@ -502,6 +585,9 @@ namespace Diffusion.Toolkit
             var civitAiExtensionDataStore = new CivitAiExtensionDataStore(civitaiExtensionDbPath);
             ServiceLocator.SetCivitAiExtensionDataStore(civitAiExtensionDataStore);
 
+            // Share CivitAI extension data store with DataStore for filter queries
+            dataStore.SetCivitAiExtensionDataStore(civitAiExtensionDataStore);
+
             var isFirstTime = false;
             IReadOnlyList<string> newFolders = null;
 
@@ -680,7 +766,9 @@ namespace Diffusion.Toolkit
                 }
             );
 
-
+            // Initialize tag icon cache (must be after dataStore.Create which runs migrations)
+            TagIconCache.Initialize();
+            TagIconCache.RefreshTagMappings();
 
             //var total = _dataStore.GetTotal();
 
@@ -819,6 +907,7 @@ namespace Diffusion.Toolkit
             Logger.Log($"Loading models");
 
             LoadAlbums();
+            LoadSmartAlbums();
             LoadQueries();
             LoadModels();
             LoadImageModels();
@@ -1035,6 +1124,11 @@ namespace Diffusion.Toolkit
 
         private ICollection<Model> _modelsCollection;
         private Prompts _prompts;
+
+        private void LoadSmartAlbums()
+        {
+            _search.LoadSmartAlbums();
+        }
 
         private void LoadModels()
         {
