@@ -1625,11 +1625,12 @@ namespace Diffusion.Toolkit
                 Logger.Log($"AssignDownloadedImagesToAlbum: Looking for downloads with created_at >= '{_downloadStartTime}'");
 
                 var downloadedPaths = new List<string>();
+                var pathToCollection = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 // Query for files created at or after the download start time
                 using (var connection = new SQLite.SQLiteConnection(civitaiDbPath, SQLite.SQLiteOpenFlags.ReadOnly))
                 {
-                    var query = "SELECT local_path FROM downloads WHERE status = 'completed' AND updated_at > ?";
+                    var query = "SELECT local_path, collection_name FROM downloads WHERE status = 'completed' AND updated_at > ?";
                     Logger.Log($"AssignDownloadedImagesToAlbum: SQL Query = {query}");
                     Logger.Log($"AssignDownloadedImagesToAlbum: Query parameter (download start time) = '{_downloadStartTime}");
 
@@ -1640,8 +1641,10 @@ namespace Diffusion.Toolkit
                     {
                         if (!string.IsNullOrEmpty(record.local_path))
                         {
-                            Logger.Log($"AssignDownloadedImagesToAlbum:   - Found path: {record.local_path}");
+                            Logger.Log($"AssignDownloadedImagesToAlbum:   - Found path: {record.local_path} (collection: {record.collection_name})");
                             downloadedPaths.Add(record.local_path);
+                            if (!string.IsNullOrEmpty(record.collection_name))
+                                pathToCollection[record.local_path] = record.collection_name;
                         }
                         else
                         {
@@ -1747,6 +1750,41 @@ namespace Diffusion.Toolkit
                 {
                     Logger.Log($"AssignDownloadedImagesToAlbum: ERROR - Failed to assign images to album '{albumName}'");
                 }
+
+                // Tag each image with COLL_{collection_name}
+                Logger.Log("AssignDownloadedImagesToAlbum: Applying collection tags...");
+
+                // Build path→imageId map (imageIds list is parallel to downloadedPaths)
+                var pathToImageId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < Math.Min(downloadedPaths.Count, imageIds.Count); i++)
+                {
+                    if (imageIds[i] > 0)
+                        pathToImageId[downloadedPaths[i]] = imageIds[i];
+                }
+
+                // Group image IDs by collection name
+                var collectionToImageIds = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in pathToCollection)
+                {
+                    if (pathToImageId.TryGetValue(kvp.Key, out var imgId))
+                    {
+                        if (!collectionToImageIds.ContainsKey(kvp.Value))
+                            collectionToImageIds[kvp.Value] = new List<int>();
+                        collectionToImageIds[kvp.Value].Add(imgId);
+                    }
+                }
+
+                // Apply one tag per collection
+                foreach (var kvp in collectionToImageIds)
+                {
+                    var tagName = $"COLL_{kvp.Key}";
+                    var tagId = ServiceLocator.DataStore.GetOrCreateTag(tagName);
+                    if (tagId > 0)
+                    {
+                        ServiceLocator.DataStore.AddImagesTag(kvp.Value, tagId);
+                        Logger.Log($"AssignDownloadedImagesToAlbum: Tagged {kvp.Value.Count} images with '{tagName}' (tagId={tagId})");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -1759,6 +1797,7 @@ namespace Diffusion.Toolkit
         private class CivitaiDownloadRecord
         {
             public string? local_path { get; set; }
+            public string? collection_name { get; set; }
         }
 
         private async Task LaunchCivitaiPipeline()

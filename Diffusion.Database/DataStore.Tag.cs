@@ -51,6 +51,28 @@ namespace Diffusion.Database
             db.Close();
         }
 
+        public int GetOrCreateTag(string name)
+        {
+            using var db = OpenConnection();
+
+            lock (_lock)
+            {
+                var existing = db.Query<Tag>("SELECT Id, Name FROM Tag WHERE Name = ?", name).FirstOrDefault();
+                if (existing != null)
+                {
+                    db.Close();
+                    return existing.Id;
+                }
+
+                var command = db.CreateCommand("INSERT INTO Tag (Name) VALUES (?)", name);
+                command.ExecuteNonQuery();
+
+                var created = db.Query<Tag>("SELECT Id, Name FROM Tag WHERE Name = ?", name).FirstOrDefault();
+                db.Close();
+                return created?.Id ?? 0;
+            }
+        }
+
         public void UpdateTag(int id, string name)
         {
             using var db = OpenConnection();
