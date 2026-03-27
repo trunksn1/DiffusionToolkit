@@ -370,7 +370,7 @@
                             </Grid.ColumnDefinitions>
                             <CheckBox IsChecked="{Binding UseCivitaiLoraRiforgiati}" VerticalContentAlignment="Center" Content="Lora Riforgiati"></CheckBox>
                             <TextBox VerticalContentAlignment="Center" Text="{Binding CivitaiLoraRiforgiati}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
-                                     ToolTip="Empty = has any data. Text = contains search. =value for exact match. * for wildcard."></TextBox>
+                                     ToolTip="Empty = has any data. Text = contains. =value = exact match. * = wildcard. Comma-separated = OR (e.g. PERFECT, ANEW)"></TextBox>
                         </Grid>
                         <Grid Margin="0,0,0,5">
                             <Grid.ColumnDefinitions>
@@ -379,7 +379,7 @@
                             </Grid.ColumnDefinitions>
                             <CheckBox IsChecked="{Binding UseCivitaiLoraInForge}" VerticalContentAlignment="Center" Content="Lora In Forge"></CheckBox>
                             <TextBox VerticalContentAlignment="Center" Text="{Binding CivitaiLoraInForge}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
-                                     ToolTip="Empty = has any data. Text = contains search. =value for exact match. * for wildcard."></TextBox>
+                                     ToolTip="Empty = has any data. Text = contains. =value = exact match. * = wildcard. Comma-separated = OR (e.g. PERFECT, ANEW)"></TextBox>
                         </Grid>
                         <Grid Margin="0,0,0,5">
                             <Grid.ColumnDefinitions>
@@ -388,7 +388,7 @@
                             </Grid.ColumnDefinitions>
                             <CheckBox IsChecked="{Binding UseCivitaiReforgedTags}" VerticalContentAlignment="Center" Content="Reforged Tags"></CheckBox>
                             <TextBox VerticalContentAlignment="Center" Text="{Binding CivitaiReforgedTags}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
-                                     ToolTip="Empty = has any data. Text = contains search. =value for exact match. * for wildcard."></TextBox>
+                                     ToolTip="Empty = has any data. Text = contains. =value = exact match. * = wildcard. Comma-separated = OR (e.g. PERFECT, ANEW)"></TextBox>
                         </Grid>
                     </StackPanel>
                 </ScrollViewer>

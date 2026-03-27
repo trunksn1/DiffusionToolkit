@@ -164,6 +164,21 @@ def cmd_sync(args, orchestrator: DownloadOrchestrator, config: dict):
 
         print(f"\n{'='*80}")
 
+        # If ALL collections returned 0 images from the API, cookies are likely expired.
+        # (All-already-downloaded would show total_images > 0 since those are counted as skipped.)
+        if total_stats['total_images'] == 0 and len(collections) > 0:
+            cookie_file = Path(__file__).parent / 'civitai.com_cookies.txt'
+            print("\n" + "=" * 60)
+            print("WARNING: No images were found in any collection!")
+            print("=" * 60)
+            print("\nThis usually means your CivitAI session cookies have")
+            print("expired. You need to log into CivitAI and re-export them.")
+            print(f"\nReplace the cookies file at:")
+            print(f"  {cookie_file}")
+            print("\n(If your collections are genuinely empty, ignore this.)")
+            print("=" * 60 + "\n")
+            sys.exit(2)  # Exit code 2 = likely auth failure
+
 
 def cmd_dry_run(args, orchestrator: DownloadOrchestrator, config: dict):
     """Show what would be downloaded without actually downloading."""

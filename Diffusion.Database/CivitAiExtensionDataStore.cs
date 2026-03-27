@@ -143,25 +143,39 @@ public class CivitAiExtensionDataStore
         {
             // Empty = has any non-empty data
             conditions.Add($"({column} IS NOT NULL AND {column} != '')");
+            return;
         }
-        else if (value.StartsWith("="))
+
+        // Comma-separated tokens are OR-combined, each token follows the same rules:
+        //   =value  → exact match
+        //   val*ue  → wildcard (* → %)
+        //   value   → contains (auto-wrapped with %)
+        var tokens = value.Split(',').Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+
+        var orClauses = new List<string>();
+        foreach (var token in tokens)
         {
-            // Exact match: =PERFECT matches only "PERFECT"
-            conditions.Add($"({column} = ?)");
-            parameters.Add(value.Substring(1));
+            if (token.StartsWith("="))
+            {
+                orClauses.Add($"{column} = ?");
+                parameters.Add(token.Substring(1));
+            }
+            else if (token.Contains('*'))
+            {
+                orClauses.Add($"{column} LIKE ?");
+                parameters.Add(token.Replace("*", "%"));
+            }
+            else
+            {
+                orClauses.Add($"{column} LIKE ?");
+                parameters.Add($"%{token}%");
+            }
         }
-        else if (value.Contains('*'))
-        {
-            // Custom wildcard pattern: * → %
-            conditions.Add($"({column} LIKE ?)");
-            parameters.Add(value.Replace("*", "%"));
-        }
+
+        if (orClauses.Count == 1)
+            conditions.Add($"({orClauses[0]})");
         else
-        {
-            // Default: contains search (auto-wrap with %)
-            conditions.Add($"({column} LIKE ?)");
-            parameters.Add($"%{value}%");
-        }
+            conditions.Add("(" + string.Join(" OR ", orClauses) + ")");
     }
 
     /// <summary>

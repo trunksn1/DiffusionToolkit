@@ -1460,6 +1460,26 @@ namespace Diffusion.Toolkit
                     Logger.Log($"LaunchCivitaiScraper: Process exited with code {process.ExitCode}");
                 });
 
+                // Check for suspected auth failure (exit code 2 = all collections returned 0 images from API)
+                if (process.ExitCode == 2)
+                {
+                    Logger.Log("LaunchCivitaiScraper: WARNING - No images found in any collection (exit code 2) - cookies likely expired");
+                    var cookiePath = System.IO.Path.Combine(scriptsBasePath, "civitai.com_cookies.txt");
+                    MessageBox.Show(this,
+                        "No images were found in any collection.\n\n" +
+                        "This almost always means your CivitAI session cookies have expired.\n\n" +
+                        "To fix this:\n" +
+                        "1. Open Chrome and log into civitai.com\n" +
+                        "2. Install the \"Get cookies.txt LOCALLY\" extension\n" +
+                        "3. Export cookies for civitai.com in Netscape format\n" +
+                        $"4. Save as:\n   {cookiePath}\n\n" +
+                        "Then try again.",
+                        "CivitAI: No Images Found (Cookies Expired?)",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
                 // Validate database was updated by Python script
                 Logger.Log("LaunchCivitaiScraper: Validating database was updated...");
                 if (File.Exists(civitaiDbPath))
@@ -1471,13 +1491,6 @@ namespace Diffusion.Toolkit
                     {
                         Logger.Log("LaunchCivitaiScraper: WARNING - Database was NOT updated by Python script!");
                         Logger.Log($"LaunchCivitaiScraper: Before: {dbModifiedBefore}, After: {dbModifiedAfter}");
-                        MessageBox.Show(this,
-                            "Warning: The database was not updated by the Python script.\n\n" +
-                            "This may indicate the script did not run correctly or found no new images to download.\n\n" +
-                            "Check the Python console output for details.",
-                            "Database Not Updated",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
                     }
                     else
                     {
