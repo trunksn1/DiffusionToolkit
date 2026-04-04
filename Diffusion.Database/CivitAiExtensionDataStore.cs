@@ -103,6 +103,7 @@ public class CivitAiExtensionDataStore
     /// Returns paths from Image2 that match the given conditions.
     /// Text matching:
     ///   - Empty = has any non-empty data
+    ///   - "!" = field is empty or null
     ///   - "=value" = exact match
     ///   - "value" = contains (auto-wrapped with %)
     ///   - "val*ue" = custom wildcard pattern (* → %)
@@ -143,6 +144,13 @@ public class CivitAiExtensionDataStore
         {
             // Empty = has any non-empty data
             conditions.Add($"({column} IS NOT NULL AND {column} != '')");
+            return;
+        }
+
+        if (value.Trim() == "!")
+        {
+            // "!" = field is empty or null
+            conditions.Add($"({column} IS NULL OR {column} = '')");
             return;
         }
 
