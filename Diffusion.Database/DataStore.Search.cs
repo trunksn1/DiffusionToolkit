@@ -643,15 +643,18 @@ namespace Diffusion.Database
                 return;
 
             var hasCivitaiFilter = filter.UseCivitaiLink || filter.UseCivitaiLoraRiforgiati ||
-                                   filter.UseCivitaiLoraInForge || filter.UseCivitaiReforgedTags;
+                                   filter.UseCivitaiLoraInForge || filter.UseCivitaiReforgedTags ||
+                                   filter.UseCivitaiLoraHashes;
 
             if (!hasCivitaiFilter)
                 return;
 
             // Query external DB for matching paths
-            string? loraRiforgiati = filter.UseCivitaiLoraRiforgiati ? (filter.CivitaiLoraRiforgiati ?? "") : null;
-            string? loraInForge = filter.UseCivitaiLoraInForge ? (filter.CivitaiLoraInForge ?? "") : null;
-            string? reforgedTags = filter.UseCivitaiReforgedTags ? (filter.CivitaiReforgedTags ?? "") : null;
+            // When the Empty checkbox is checked, pass "!" to trigger the IS NULL/empty condition
+            string? loraRiforgiati = filter.UseCivitaiLoraRiforgiati ? (filter.CivitaiLoraRiforgiatiEmpty ? "!" : (filter.CivitaiLoraRiforgiati ?? "")) : null;
+            string? loraInForge = filter.UseCivitaiLoraInForge ? (filter.CivitaiLoraInForgeEmpty ? "!" : (filter.CivitaiLoraInForge ?? "")) : null;
+            string? reforgedTags = filter.UseCivitaiReforgedTags ? (filter.CivitaiReforgedTagsEmpty ? "!" : (filter.CivitaiReforgedTags ?? "")) : null;
+            string? loraHashes = filter.UseCivitaiLoraHashes ? (filter.CivitaiLoraHashesEmpty ? "!" : (filter.CivitaiLoraHashes ?? "")) : null;
 
             List<string> matchingPaths;
 
@@ -669,7 +672,7 @@ namespace Diffusion.Database
             }
 
             // For inclusion filters, query external DB with combined criteria
-            if (filter.UseCivitaiLink && filter.CivitaiLink && loraRiforgiati == null && loraInForge == null && reforgedTags == null)
+            if (filter.UseCivitaiLink && filter.CivitaiLink && loraRiforgiati == null && loraInForge == null && reforgedTags == null && loraHashes == null)
             {
                 // "Has CivitAI data" without other criteria
                 matchingPaths = _civitAiExtensionDataStore.GetAllPaths();
@@ -678,7 +681,7 @@ namespace Diffusion.Database
             {
                 matchingPaths = _civitAiExtensionDataStore.SearchPaths(
                     filter.UseCivitaiLink && filter.CivitaiLink ? true : null,
-                    loraRiforgiati, loraInForge, reforgedTags);
+                    loraRiforgiati, loraInForge, reforgedTags, loraHashes);
             }
 
             if (matchingPaths.Count > 0)

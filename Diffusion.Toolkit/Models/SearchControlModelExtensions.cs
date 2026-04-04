@@ -99,10 +99,16 @@ public static class SearchControlModelExtensions
         model.CivitaiLink = filter.CivitaiLink;
         model.UseCivitaiLoraRiforgiati = filter.UseCivitaiLoraRiforgiati;
         model.CivitaiLoraRiforgiati = filter.CivitaiLoraRiforgiati;
+        model.CivitaiLoraRiforgiatiEmpty = filter.CivitaiLoraRiforgiatiEmpty;
         model.UseCivitaiLoraInForge = filter.UseCivitaiLoraInForge;
         model.CivitaiLoraInForge = filter.CivitaiLoraInForge;
+        model.CivitaiLoraInForgeEmpty = filter.CivitaiLoraInForgeEmpty;
         model.UseCivitaiReforgedTags = filter.UseCivitaiReforgedTags;
         model.CivitaiReforgedTags = filter.CivitaiReforgedTags;
+        model.CivitaiReforgedTagsEmpty = filter.CivitaiReforgedTagsEmpty;
+        model.UseCivitaiLoraHashes = filter.UseCivitaiLoraHashes;
+        model.CivitaiLoraHashes = filter.CivitaiLoraHashes;
+        model.CivitaiLoraHashesEmpty = filter.CivitaiLoraHashesEmpty;
 
         model.NodeFilters = new ObservableCollection<Controls.NodeFilter>(filter.NodeFilters.Select(d => new Controls.NodeFilter()
         {
@@ -207,10 +213,16 @@ public static class SearchControlModelExtensions
         filter.CivitaiLink = model.CivitaiLink;
         filter.UseCivitaiLoraRiforgiati = model.UseCivitaiLoraRiforgiati;
         filter.CivitaiLoraRiforgiati = model.CivitaiLoraRiforgiati;
+        filter.CivitaiLoraRiforgiatiEmpty = model.CivitaiLoraRiforgiatiEmpty;
         filter.UseCivitaiLoraInForge = model.UseCivitaiLoraInForge;
         filter.CivitaiLoraInForge = model.CivitaiLoraInForge;
+        filter.CivitaiLoraInForgeEmpty = model.CivitaiLoraInForgeEmpty;
         filter.UseCivitaiReforgedTags = model.UseCivitaiReforgedTags;
         filter.CivitaiReforgedTags = model.CivitaiReforgedTags;
+        filter.CivitaiReforgedTagsEmpty = model.CivitaiReforgedTagsEmpty;
+        filter.UseCivitaiLoraHashes = model.UseCivitaiLoraHashes;
+        filter.CivitaiLoraHashes = model.CivitaiLoraHashes;
+        filter.CivitaiLoraHashesEmpty = model.CivitaiLoraHashesEmpty;
 
         filter.NodeFilters = model.NodeFilters.Select(d => new NodeFilter()
         {

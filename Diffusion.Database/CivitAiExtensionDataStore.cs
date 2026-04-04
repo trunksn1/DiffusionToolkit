@@ -108,7 +108,7 @@ public class CivitAiExtensionDataStore
     ///   - "value" = contains (auto-wrapped with %)
     ///   - "val*ue" = custom wildcard pattern (* → %)
     /// </summary>
-    public List<string> SearchPaths(bool? hasAnyData, string? loraRiforgiati, string? loraInForge, string? reforgedTags)
+    public List<string> SearchPaths(bool? hasAnyData, string? loraRiforgiati, string? loraInForge, string? reforgedTags, string? loraHashes = null)
     {
         if (!_isAvailable)
             return new List<string>();
@@ -123,6 +123,7 @@ public class CivitAiExtensionDataStore
             AddFieldCondition(conditions, parameters, "lora_riforgiati", loraRiforgiati);
             AddFieldCondition(conditions, parameters, "lora_in_forge", loraInForge);
             AddFieldCondition(conditions, parameters, "reforged_tags", reforgedTags);
+            AddFieldCondition(conditions, parameters, "Lora_hashes", loraHashes);
 
             var where = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
             var sql = $"SELECT Path FROM Image2{where}";

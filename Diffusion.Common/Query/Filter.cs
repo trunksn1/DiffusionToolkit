@@ -75,12 +75,19 @@ public class Filter
 
     public bool UseCivitaiLoraRiforgiati { get; set; }
     public string CivitaiLoraRiforgiati { get; set; }
+    public bool CivitaiLoraRiforgiatiEmpty { get; set; }
 
     public bool UseCivitaiLoraInForge { get; set; }
     public string CivitaiLoraInForge { get; set; }
+    public bool CivitaiLoraInForgeEmpty { get; set; }
 
     public bool UseCivitaiReforgedTags { get; set; }
     public string CivitaiReforgedTags { get; set; }
+    public bool CivitaiReforgedTagsEmpty { get; set; }
+
+    public bool UseCivitaiLoraHashes { get; set; }
+    public string CivitaiLoraHashes { get; set; }
+    public bool CivitaiLoraHashesEmpty { get; set; }
 
     public bool UseCreationDate { get; set; }
     public DateTime? Start { get; set; }
@@ -125,6 +132,7 @@ public class Filter
                             UseCivitaiLoraRiforgiati ||
                             UseCivitaiLoraInForge ||
                             UseCivitaiReforgedTags ||
+                            UseCivitaiLoraHashes ||
                             UseCreationDate ||
                             UseHyperNet ||
                             UseHyperNetStr ||

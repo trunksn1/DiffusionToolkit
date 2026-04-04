@@ -560,6 +560,12 @@ public class FilterControlModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public bool CivitaiLoraRiforgiatiEmpty
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public bool UseCivitaiLoraInForge
     {
         get;
@@ -572,6 +578,12 @@ public class FilterControlModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public bool CivitaiLoraInForgeEmpty
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public bool UseCivitaiReforgedTags
     {
         get;
@@ -579,6 +591,30 @@ public class FilterControlModel : BaseNotify
     }
 
     public string CivitaiReforgedTags
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool CivitaiReforgedTagsEmpty
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseCivitaiLoraHashes
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string CivitaiLoraHashes
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool CivitaiLoraHashesEmpty
     {
         get;
         set => SetField(ref field, value);
@@ -613,6 +649,7 @@ public class FilterControlModel : BaseNotify
                              UseCivitaiLoraRiforgiati ||
                              UseCivitaiLoraInForge ||
                              UseCivitaiReforgedTags ||
+                             UseCivitaiLoraHashes ||
                              UseCreationDate ||
                              UseHyperNet ||
                              UseHyperNetStr ||
@@ -704,10 +741,16 @@ public class FilterControlModel : BaseNotify
         UseCivitaiLink = false;
         CivitaiLoraRiforgiati = String.Empty;
         UseCivitaiLoraRiforgiati = false;
+        CivitaiLoraRiforgiatiEmpty = false;
         CivitaiLoraInForge = String.Empty;
         UseCivitaiLoraInForge = false;
+        CivitaiLoraInForgeEmpty = false;
         CivitaiReforgedTags = String.Empty;
         UseCivitaiReforgedTags = false;
+        CivitaiReforgedTagsEmpty = false;
+        CivitaiLoraHashes = String.Empty;
+        UseCivitaiLoraHashes = false;
+        CivitaiLoraHashesEmpty = false;
         foreach (var nodeFilter in NodeFilters)
         {
             nodeFilter.IsActive = false;
