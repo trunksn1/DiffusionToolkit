@@ -79,6 +79,12 @@ public class MainModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public ICommand BackfillAuthorTagsCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public ICommand LaunchComfyUICommand
     {
         get;

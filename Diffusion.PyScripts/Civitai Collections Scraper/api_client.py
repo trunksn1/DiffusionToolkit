@@ -281,7 +281,8 @@ class CivitAIClient:
                         url=img['url'],
                         collection_id=collection_id,
                         collection_name=collection_name,
-                        nsfw=img.get('nsfw') or img.get('nsfwLevel')
+                        nsfw=img.get('nsfw') or img.get('nsfwLevel'),
+                        username=img.get('user', {}).get('username') if isinstance(img.get('user'), dict) else None
                     ))
                 except (KeyError, TypeError) as e:
                     logger.error(f"Error parsing image {i}: {e}")

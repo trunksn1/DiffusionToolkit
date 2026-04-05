@@ -121,6 +121,7 @@ namespace Diffusion.Toolkit
 
                 _model.LaunchCivitaiScraperCommand = new RelayCommand<object>((o) => LaunchCivitaiScraper());
                 _model.LaunchCivitaiPipelineCommand = new AsyncCommand<object>(async (o) => await LaunchCivitaiPipeline());
+                _model.BackfillAuthorTagsCommand = new AsyncCommand<object>(async (o) => await BackfillAuthorTags());
                 _model.LaunchComfyUICommand = new RelayCommand<object>((o) => LaunchComfyUI());
 
                 _model.ReloadHashes = new AsyncCommand<object>(async (o) =>
@@ -1626,11 +1627,12 @@ namespace Diffusion.Toolkit
 
                 var downloadedPaths = new List<string>();
                 var pathToCollection = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var pathToUsername = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 // Query for files created at or after the download start time
                 using (var connection = new SQLite.SQLiteConnection(civitaiDbPath, SQLite.SQLiteOpenFlags.ReadOnly))
                 {
-                    var query = "SELECT local_path, collection_name FROM downloads WHERE status = 'completed' AND updated_at > ?";
+                    var query = "SELECT local_path, collection_name, username FROM downloads WHERE status = 'completed' AND updated_at > ?";
                     Logger.Log($"AssignDownloadedImagesToAlbum: SQL Query = {query}");
                     Logger.Log($"AssignDownloadedImagesToAlbum: Query parameter (download start time) = '{_downloadStartTime}");
 
@@ -1645,6 +1647,8 @@ namespace Diffusion.Toolkit
                             downloadedPaths.Add(record.local_path);
                             if (!string.IsNullOrEmpty(record.collection_name))
                                 pathToCollection[record.local_path] = record.collection_name;
+                            if (!string.IsNullOrEmpty(record.username))
+                                pathToUsername[record.local_path] = record.username;
                         }
                         else
                         {
@@ -1785,6 +1789,31 @@ namespace Diffusion.Toolkit
                         Logger.Log($"AssignDownloadedImagesToAlbum: Tagged {kvp.Value.Count} images with '{tagName}' (tagId={tagId})");
                     }
                 }
+
+                // Tag each image with zz_AUTHOR_{username}
+                Logger.Log("AssignDownloadedImagesToAlbum: Applying author tags...");
+
+                var authorToImageIds = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in pathToUsername)
+                {
+                    if (pathToImageId.TryGetValue(kvp.Key, out var imgId))
+                    {
+                        if (!authorToImageIds.ContainsKey(kvp.Value))
+                            authorToImageIds[kvp.Value] = new List<int>();
+                        authorToImageIds[kvp.Value].Add(imgId);
+                    }
+                }
+
+                foreach (var kvp in authorToImageIds)
+                {
+                    var tagName = $"zz_AUTHOR_{kvp.Key}";
+                    var tagId = ServiceLocator.DataStore.GetOrCreateTag(tagName);
+                    if (tagId > 0)
+                    {
+                        ServiceLocator.DataStore.AddImagesTag(kvp.Value, tagId);
+                        Logger.Log($"AssignDownloadedImagesToAlbum: Tagged {kvp.Value.Count} images with '{tagName}' (tagId={tagId})");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -1798,6 +1827,116 @@ namespace Diffusion.Toolkit
         {
             public string? local_path { get; set; }
             public string? collection_name { get; set; }
+            public string? username { get; set; }
+        }
+
+        private async Task BackfillAuthorTags()
+        {
+            try
+            {
+                var civitaiDbPath = GetCivitaiDatabasePath();
+
+                if (!File.Exists(civitaiDbPath))
+                {
+                    await ServiceLocator.MessageService.Show(
+                        "CivitAI state database not found.\n\nRun the scraper at least once first.",
+                        "Backfill Author Tags", PopupButtons.OK);
+                    return;
+                }
+
+                Logger.Log("BackfillAuthorTags: Starting...");
+
+                // Query ALL completed downloads with a username from the CivitAI state DB
+                var pathToUsername = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                using (var connection = new SQLite.SQLiteConnection(civitaiDbPath, SQLite.SQLiteOpenFlags.ReadOnly))
+                {
+                    var query = "SELECT local_path, username FROM downloads WHERE status = 'completed' AND username IS NOT NULL AND username != ''";
+                    var results = connection.Query<CivitaiDownloadRecord>(query);
+
+                    foreach (var record in results)
+                    {
+                        if (!string.IsNullOrEmpty(record.local_path) && !string.IsNullOrEmpty(record.username))
+                            pathToUsername[record.local_path] = record.username;
+                    }
+                }
+
+                Logger.Log($"BackfillAuthorTags: Found {pathToUsername.Count} downloads with usernames");
+
+                if (pathToUsername.Count == 0)
+                {
+                    await ServiceLocator.MessageService.Show(
+                        "No downloads with author usernames found.\n\nRun the backfill_usernames.py script first to populate usernames.",
+                        "Backfill Author Tags", PopupButtons.OK);
+                    return;
+                }
+
+                // Resolve paths to image IDs in the Diffusion Toolkit database
+                var allPaths = pathToUsername.Keys.ToList();
+                var imageIds = ServiceLocator.DataStore.GetImageIdsByPaths(allPaths).ToList();
+
+                // Build path→imageId map (parallel lists)
+                var pathToImageId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < Math.Min(allPaths.Count, imageIds.Count); i++)
+                {
+                    if (imageIds[i] > 0)
+                        pathToImageId[allPaths[i]] = imageIds[i];
+                }
+
+                Logger.Log($"BackfillAuthorTags: Matched {pathToImageId.Count} images in database");
+
+                if (pathToImageId.Count == 0)
+                {
+                    await ServiceLocator.MessageService.Show(
+                        "No matching images found in the Diffusion Toolkit database.\n\nMake sure the download folder has been scanned.",
+                        "Backfill Author Tags", PopupButtons.OK);
+                    return;
+                }
+
+                // Group image IDs by username
+                var authorToImageIds = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in pathToUsername)
+                {
+                    if (pathToImageId.TryGetValue(kvp.Key, out var imgId))
+                    {
+                        if (!authorToImageIds.ContainsKey(kvp.Value))
+                            authorToImageIds[kvp.Value] = new List<int>();
+                        authorToImageIds[kvp.Value].Add(imgId);
+                    }
+                }
+
+                Logger.Log($"BackfillAuthorTags: Found {authorToImageIds.Count} distinct authors");
+
+                // Apply zz_AUTHOR_ tags
+                int taggedCount = 0;
+                foreach (var kvp in authorToImageIds)
+                {
+                    var tagName = $"zz_AUTHOR_{kvp.Key}";
+                    var tagId = ServiceLocator.DataStore.GetOrCreateTag(tagName);
+                    if (tagId > 0)
+                    {
+                        ServiceLocator.DataStore.AddImagesTag(kvp.Value, tagId);
+                        taggedCount += kvp.Value.Count;
+                        Logger.Log($"BackfillAuthorTags: Tagged {kvp.Value.Count} images with '{tagName}'");
+                    }
+                }
+
+                Logger.Log($"BackfillAuthorTags: DONE - Tagged {taggedCount} images across {authorToImageIds.Count} authors");
+
+                await ServiceLocator.MessageService.Show(
+                    $"Author tags applied!\n\n" +
+                    $"Authors: {authorToImageIds.Count}\n" +
+                    $"Images tagged: {taggedCount}",
+                    "Backfill Author Tags", PopupButtons.OK);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"BackfillAuthorTags: ERROR - {ex.Message}");
+                Logger.Log($"BackfillAuthorTags: Stack trace: {ex.StackTrace}");
+                await ServiceLocator.MessageService.Show(
+                    $"Error: {ex.Message}",
+                    "Backfill Author Tags", PopupButtons.OK);
+            }
         }
 
         private async Task LaunchCivitaiPipeline()

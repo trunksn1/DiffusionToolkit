@@ -27,6 +27,7 @@ class ImageItem:
     collection_id: int
     collection_name: str
     nsfw: Optional[bool] = None
+    username: Optional[str] = None
 
     def __hash__(self):
         return hash(self.id)
@@ -48,6 +49,7 @@ class DownloadRecord:
     file_hash: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: int = 0
+    username: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -62,6 +64,7 @@ class DownloadRecord:
             'file_hash': self.file_hash,
             'error_message': self.error_message,
             'retry_count': self.retry_count,
+            'username': self.username,
             'created_at': self.created_at or datetime.now(),
             'updated_at': datetime.now()
         }

@@ -510,6 +510,10 @@
                             <fa:ImageAwesome ToolTip="Launch Civitai Collections Pipeline (will close app)" Icon="Cogs" Width="16" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" HorizontalAlignment="Center">
                             </fa:ImageAwesome>
                         </Button>
+                        <Button Margin="0,5,0,10" Height="16" Width="24" Style="{StaticResource BorderlessToolbarButton}" Command="{Binding BackfillAuthorTagsCommand}">
+                            <fa:ImageAwesome ToolTip="Backfill author tags from CivitAI downloads" Icon="UserPlus" Width="16" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            </fa:ImageAwesome>
+                        </Button>
                         <Separator BorderThickness="1" BorderBrush="{DynamicResource SecondaryBrush}"></Separator>
                         <Button Margin="0,5,0,10" Height="16" Width="24" Style="{StaticResource BorderlessToolbarButton}" Command="{Binding LaunchComfyUICommand}">
                             <fa:ImageAwesome ToolTip="Open selected image in ComfyUI (automatic workflow loading)" Icon="Sitemap" Width="16" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" HorizontalAlignment="Center">

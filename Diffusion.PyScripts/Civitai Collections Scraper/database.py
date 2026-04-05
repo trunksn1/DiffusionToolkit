@@ -55,6 +55,12 @@ class StateDatabase:
                 )
             """)
 
+            # Migration: add username column if missing
+            try:
+                conn.execute("ALTER TABLE downloads ADD COLUMN username TEXT")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+
             # Create indexes for better query performance
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_collection_id
@@ -122,7 +128,8 @@ class StateDatabase:
                     None,  # local_path
                     None,  # file_hash
                     None,  # error_message
-                    0      # retry_count
+                    0,     # retry_count
+                    img.username
                 )
                 for img in images
             ]
@@ -131,13 +138,14 @@ class StateDatabase:
             conn.executemany("""
                 INSERT INTO downloads (
                     civitai_id, collection_id, collection_name, status,
-                    local_path, file_hash, error_message, retry_count
+                    local_path, file_hash, error_message, retry_count, username
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(civitai_id) DO UPDATE SET
                     collection_id = excluded.collection_id,
                     collection_name = excluded.collection_name,
                     status = excluded.status,
+                    username = COALESCE(excluded.username, downloads.username),
                     updated_at = CURRENT_TIMESTAMP
             """, records)
 
@@ -288,9 +296,9 @@ class StateDatabase:
             conn.execute("""
                 INSERT INTO downloads (
                     civitai_id, collection_id, collection_name, status,
-                    local_path, file_hash, error_message, retry_count
+                    local_path, file_hash, error_message, retry_count, username
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(civitai_id) DO UPDATE SET
                     collection_id = excluded.collection_id,
                     collection_name = excluded.collection_name,
@@ -299,11 +307,12 @@ class StateDatabase:
                     file_hash = excluded.file_hash,
                     error_message = excluded.error_message,
                     retry_count = excluded.retry_count,
+                    username = COALESCE(excluded.username, downloads.username),
                     updated_at = CURRENT_TIMESTAMP
             """, (
                 record.civitai_id, record.collection_id, record.collection_name,
                 record.status.value, record.local_path, record.file_hash,
-                record.error_message, record.retry_count
+                record.error_message, record.retry_count, record.username
             ))
 
     def _row_to_record(self, row) -> DownloadRecord:
@@ -317,6 +326,7 @@ class StateDatabase:
             file_hash=row['file_hash'],
             error_message=row['error_message'],
             retry_count=row['retry_count'],
+            username=row['username'],
             created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
             updated_at=datetime.fromisoformat(row['updated_at']) if row['updated_at'] else None
         )
