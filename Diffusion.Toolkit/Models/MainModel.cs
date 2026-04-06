@@ -598,6 +598,12 @@ public class MainModel : BaseNotify
     public Action<IAlbumInfo> AddSelectedImagesToAlbum { get; set; }
 
 
+    public ICommand RebuildThumbnailsCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public ICommand FixFoldersCommand
     {
         get;

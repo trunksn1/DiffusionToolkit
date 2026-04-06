@@ -82,6 +82,7 @@ namespace Diffusion.Toolkit
             _model.AutoTagNSFW = new RelayCommand<object>((o) => AutoTagNSFW());
             _model.DownloadCivitai = new RelayCommand<object>((o) => DownloadCivitaiModels());
 
+            _model.RebuildThumbnailsCommand = new AsyncCommand<object>(RebuildThumbnailsTask);
             _model.FixFoldersCommand = new RelayCommand<object>((o) => FixFolders());
             _model.RemoveExcludedImagesCommand = new RelayCommand<object>((o) => CleanExcludedPaths());
             _model.CleanRemovedFoldersCommand = new AsyncCommand<object>(CleanRemovedFolders);

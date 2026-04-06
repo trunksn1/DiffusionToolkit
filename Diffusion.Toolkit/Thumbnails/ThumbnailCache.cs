@@ -184,6 +184,17 @@ public class ThumbnailCache
         return false;
     }
 
+    public void UnloadAll()
+    {
+        foreach (var kvp in _connectionPool)
+        {
+            if (_connectionPool.TryRemove(kvp.Key, out var cacheEntry))
+            {
+                cacheEntry.Connection.Close();
+            }
+        }
+    }
+
     public bool TryGetThumbnail(string path, int size, out BitmapSource? thumbnail)
     {
         var result = false;
@@ -208,6 +219,16 @@ public class ThumbnailCache
         }
        
         return result;
+    }
+
+    public void RemoveThumbnail(string path, int size)
+    {
+        if (TryOpenConnection(path, out var db))
+        {
+            var filename = Path.GetFileName(path);
+            var command = db.CreateCommand("DELETE FROM Thumbnail WHERE Filename = ? AND Size = ?", filename, size);
+            command.ExecuteNonQuery();
+        }
     }
 
     public void AddThumbnail(string path, int size, BitmapImage bitmapImage)

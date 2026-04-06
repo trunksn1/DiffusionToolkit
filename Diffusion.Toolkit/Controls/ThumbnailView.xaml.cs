@@ -18,6 +18,7 @@ using Diffusion.Toolkit.Services;
 using Diffusion.Toolkit.Pages;
 using Diffusion.Common;
 using Diffusion.Toolkit.Localization;
+using Diffusion.Toolkit.Thumbnails;
 using Settings = Diffusion.Toolkit.Configuration.Settings;
 using Diffusion.Database.Models;
 using System.Reflection;
@@ -82,6 +83,7 @@ namespace Diffusion.Toolkit.Controls
             Model.SavePromptAsTemplateCommand = new RelayCommand<object>(o => SavePromptAsTemplate());
             Model.EditTagsCommand = new RelayCommand<object>(o => EditTagsForSelection());
             Model.RescanCommand = new AsyncCommand<object>(o => RescanSelected());
+            Model.RebuildThumbnailCommand = new RelayCommand<object>(o => RebuildSelectedThumbnail());
             Model.RescanFolderCommand = new AsyncCommand<object>(o => RescanFolder(true));
             Model.ScanFolderCommand = new AsyncCommand<object>(o => RescanFolder(false));
 
@@ -123,6 +125,27 @@ namespace Diffusion.Toolkit.Controls
         //{
         //    FocusCurrentItem();
         //}
+
+        private void RebuildSelectedThumbnail()
+        {
+            var imageEntries = ThumbnailListView.SelectedItems.Cast<ImageEntry>().ToList();
+
+            foreach (var imageEntry in imageEntries)
+            {
+                if (imageEntry.EntryType != EntryType.File)
+                    continue;
+
+                // Remove from cache
+                ThumbnailCache.Instance.RemoveThumbnail(imageEntry.Path, ServiceLocator.ThumbnailService.Size);
+
+                // Reset state so it gets re-queued
+                imageEntry.Thumbnail = null;
+                imageEntry.LoadState = LoadState.Unloaded;
+
+                // Re-queue for loading
+                ServiceLocator.ThumbnailService.QueueImage(imageEntry);
+            }
+        }
 
         private readonly Action _debounceRedrawThumbnails;
 

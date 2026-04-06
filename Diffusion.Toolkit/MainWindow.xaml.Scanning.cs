@@ -33,6 +33,63 @@ namespace Diffusion.Toolkit
         }
 
 
+        private async Task RebuildThumbnailsTask(object o)
+        {
+            if (!ServiceLocator.FolderService.HasRootFolders)
+            {
+                await _messagePopupManager.Show("No image paths configured!", "Rebuild Thumbnails");
+                ShowSettings(null);
+                return;
+            }
+
+            var result = await _messagePopupManager.ShowMedium(
+                "This will delete all cached thumbnails and regenerate them from the original images. This can fix incorrect previews.\n\nContinue?",
+                "Rebuild Thumbnails",
+                PopupButtons.YesNo);
+
+            if (result != PopupResult.Yes)
+                return;
+
+            await Task.Run(() =>
+            {
+                // Close all open thumbnail database connections
+                Thumbnails.ThumbnailCache.Instance.UnloadAll();
+
+                var deleted = 0;
+
+                foreach (var folder in ServiceLocator.FolderService.RootFolders)
+                {
+                    if (!Directory.Exists(folder.Path))
+                        continue;
+
+                    foreach (var dbFile in Directory.EnumerateFiles(folder.Path, "dt_thumbnails.db", SearchOption.AllDirectories))
+                    {
+                        try
+                        {
+                            File.Delete(dbFile);
+                            deleted++;
+
+                            // Also delete journal file if present
+                            var journal = dbFile + "-journal";
+                            if (File.Exists(journal))
+                                File.Delete(journal);
+                        }
+                        catch
+                        {
+                            // File may be locked, skip
+                        }
+                    }
+                }
+
+                Dispatcher.Invoke(() =>
+                {
+                    _search?.SearchImages(null);
+                });
+            });
+
+            await _messagePopupManager.Show("Thumbnails have been rebuilt. The view has been refreshed.", "Rebuild Thumbnails");
+        }
+
         private async Task RebuildTask(object o)
         {
             if (ServiceLocator.FolderService.HasRootFolders)
