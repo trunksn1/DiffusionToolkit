@@ -48,6 +48,15 @@
             <converters:MultiBoolToVisibilityCollapsedConverter x:Key="MultiBoolToVisibilityCollapsedConverter"></converters:MultiBoolToVisibilityCollapsedConverter>
             <converters:InvertBoolConverter x:Key="InvertBoolConverter"></converters:InvertBoolConverter>
             <converters:UnderlineConverter x:Key="UnderlineConverter"></converters:UnderlineConverter>
+            <ContextMenu x:Key="TagItemContextMenu"
+                         DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                <MenuItem Header="{lex:Loc Search.Navigation.Tags.ContextMenu.Rename}"
+                          Command="{Binding Source={StaticResource Proxy}, Path=Data.RenameTagCommand}"
+                          CommandParameter="{Binding .}"/>
+                <MenuItem Header="{lex:Loc Search.Navigation.Tags.ContextMenu.Remove}"
+                          Command="{Binding Source={StaticResource Proxy}, Path=Data.RemoveTagCommand}"
+                          CommandParameter="{Binding .}"/>
+            </ContextMenu>
         </ResourceDictionary>
     </local:NavigationPage.Resources>
     <Grid x:Name="MainGrid" Background="{DynamicResource {x:Static SystemColors.ControlBrush}}">
@@ -729,8 +738,35 @@
                                                 </Button>
                                             </Grid>
                                         </controls:AccordionControl.ButtonAreaContent>
-                                        <ItemsControl ItemsSource="{Binding Path=MainModel.Tags}" PreviewMouseWheel="UIElement_OnPreviewMouseWheel">
-                                            <ItemsControl.ItemTemplate>
+                                        <ListBox ItemsSource="{Binding Path=MainModel.Tags}"
+                                                 MaxHeight="400"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Focusable="False"
+                                                 HorizontalContentAlignment="Stretch"
+                                                 ScrollViewer.CanContentScroll="True"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 VirtualizingPanel.IsVirtualizing="True"
+                                                 VirtualizingPanel.VirtualizationMode="Recycling"
+                                                 PreviewMouseWheel="TagsList_OnPreviewMouseWheel">
+                                            <ListBox.ItemContainerStyle>
+                                                <Style TargetType="ListBoxItem">
+                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                                    <Setter Property="Padding" Value="0"/>
+                                                    <Setter Property="Margin" Value="0"/>
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                    <Setter Property="Focusable" Value="False"/>
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="ListBoxItem">
+                                                                <ContentPresenter/>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </ListBox.ItemContainerStyle>
+                                            <ListBox.ItemTemplate>
                                                 <DataTemplate>
                                                     <Grid Background="Transparent" HorizontalAlignment="Stretch" Margin="2,0,2,0">
                                                         <Grid.ColumnDefinitions>
@@ -738,18 +774,12 @@
                                                             <ColumnDefinition/>
                                                         </Grid.ColumnDefinitions>
                                                         <CheckBox VerticalAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding IsTicked}" Click="TagCheck_OnClick"></CheckBox>
-                                                        <Button Grid.Column="1" Style="{StaticResource SmallButton}" 
-                                                                Tag="{Binding .}"
-                                                                AllowDrop="True" 
+                                                        <Button Grid.Column="1" Style="{StaticResource SmallButton}"
+                                                                AllowDrop="True"
                                                                 ToolTip="{Binding Name}"
                                                                 Click="Tag_OnClick"
+                                                                ContextMenu="{StaticResource TagItemContextMenu}"
                                                                 RenderTransformOrigin="0.179,0.476">
-                                                            <Button.ContextMenu>
-                                                                <ContextMenu DataContext="{Binding Path=PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
-                                                                    <MenuItem Header="{lex:Loc Search.Navigation.Tags.ContextMenu.Rename}" Command="{Binding Source={StaticResource Proxy}, Path=Data.RenameTagCommand}" CommandParameter="{Binding .}"></MenuItem>
-                                                                    <MenuItem Header="{lex:Loc Search.Navigation.Tags.ContextMenu.Remove}" Command="{Binding Source={StaticResource Proxy}, Path=Data.RemoveTagCommand}" CommandParameter="{Binding .}"></MenuItem>
-                                                                </ContextMenu>
-                                                            </Button.ContextMenu>
                                                             <Button.Template>
                                                                 <ControlTemplate TargetType="{x:Type Button}">
                                                                     <Grid>
@@ -777,13 +807,8 @@
                                                         </Button>
                                                     </Grid>
                                                 </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Vertical"/>
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                        </ItemsControl>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
                                     </controls:AccordionControl>
 
                                     <controls:AccordionControl 

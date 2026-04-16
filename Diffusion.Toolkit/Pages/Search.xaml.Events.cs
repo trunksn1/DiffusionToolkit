@@ -143,6 +143,45 @@ namespace Diffusion.Toolkit.Pages
             return null;
         }
 
+        private void TagsList_OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (sender is not ListBox listBox) return;
+
+            var innerScrollViewer = FindChildScrollViewer(listBox);
+            if (innerScrollViewer != null && innerScrollViewer.ScrollableHeight > 0)
+            {
+                bool canScrollUp = innerScrollViewer.VerticalOffset > 0;
+                bool canScrollDown = innerScrollViewer.VerticalOffset < innerScrollViewer.ScrollableHeight;
+                if ((e.Delta > 0 && canScrollUp) || (e.Delta < 0 && canScrollDown))
+                {
+                    return;
+                }
+            }
+
+            e.Handled = true;
+            var parentEvent = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+            {
+                RoutedEvent = UIElement.MouseWheelEvent,
+                Source = sender
+            };
+            NavigationScrollViewer.RaiseEvent(parentEvent);
+        }
+
+        private ScrollViewer FindChildScrollViewer(DependencyObject current)
+        {
+            if (current == null) return null;
+            if (current is ScrollViewer sv) return sv;
+
+            int count = VisualTreeHelper.GetChildrenCount(current);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(current, i);
+                var result = FindChildScrollViewer(child);
+                if (result != null) return result;
+            }
+            return null;
+        }
+
         private void HideSearchSettings_OnClick(object sender, RoutedEventArgs e)
         {
             CloseSearchSettings();

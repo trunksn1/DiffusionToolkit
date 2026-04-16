@@ -27,13 +27,27 @@ namespace Diffusion.Database
         {
             using var db = OpenConnection();
 
-            var query = $"SELECT Id, Name, Icon, (SELECT COUNT(1) FROM {nameof(ImageTag)} IT WHERE T.Id = IT.TagId) AS [Count] FROM Tag T ORDER BY Name";
+            var query = $"SELECT T.Id, T.Name, T.Icon, COALESCE(COUNT(IT.TagId), 0) AS [Count] " +
+                        $"FROM Tag T LEFT JOIN {nameof(ImageTag)} IT ON IT.TagId = T.Id " +
+                        $"GROUP BY T.Id, T.Name, T.Icon " +
+                        $"ORDER BY T.Name";
 
             var models = db.Query<TagCount>(query);
 
             db.Close();
 
             return models;
+        }
+
+        public int GetTagCount(int tagId)
+        {
+            using var db = OpenConnection();
+
+            var count = db.ExecuteScalar<int>($"SELECT COUNT(1) FROM {nameof(ImageTag)} WHERE TagId = ?", tagId);
+
+            db.Close();
+
+            return count;
         }
 
 

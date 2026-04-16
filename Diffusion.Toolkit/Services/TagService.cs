@@ -123,7 +123,7 @@ public class TagService
                             ServiceLocator.DataStore.RemoveImagesTag(ids, imageTag.Id);
                         }
 
-                        LoadTags?.Invoke();
+                        UpdateSidebarTagCount(imageTag.Id);
                         RefreshTagIcons?.Invoke(ids);
                     }
                 }
@@ -140,7 +140,7 @@ public class TagService
                             ServiceLocator.DataStore.RemoveImageTag(imageModelId, imageTag.Id);
                         }
 
-                        LoadTags?.Invoke();
+                        UpdateSidebarTagCount(imageTag.Id);
                         RefreshTagIcons?.Invoke(new[] { imageModelId });
                     }
                 }
@@ -151,5 +151,11 @@ public class TagService
         }).ToList();
     }
 
+    private void UpdateSidebarTagCount(int tagId)
+    {
+        var sidebarTag = ServiceLocator.MainModel.Tags?.FirstOrDefault(t => t.Id == tagId);
+        if (sidebarTag == null) return;
 
+        sidebarTag.TagCount = ServiceLocator.DataStore.GetTagCount(tagId);
+    }
 }

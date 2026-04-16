@@ -415,8 +415,18 @@ public class ImageTagView : BaseNotify
 public class TagFilterView : BaseNotify
 {
     public int Id { get; set; }
-    public string Name { get; set; }
-    public int TagCount { get; set; }
+
+    public string Name
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public int TagCount
+    {
+        get;
+        set => SetField(ref field, value);
+    }
 
     public bool IsTicked
     {
