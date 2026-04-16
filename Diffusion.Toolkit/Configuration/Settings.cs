@@ -499,6 +499,12 @@ public class Settings : SettingsContainer, IScanOptions
         set => UpdateValue(ref field, value);
     } = 5; // Default: check first 5 pages (~500 images)
 
+    public List<CivitaiCollectionConfig> CivitaiCollections
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    } = new List<CivitaiCollectionConfig>();
+
     // Token Analyzer Integration
     public string? TokenAnalyzerPath
     {

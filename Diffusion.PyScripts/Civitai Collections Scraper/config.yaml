@@ -38,9 +38,9 @@ api:
   # Base URL for image downloads
   image_base_url: "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
   # API base URL
-  api_base_url: "https://civitai.com/api"
+  api_base_url: "https://civitai.red/api"
   # tRPC endpoint
-  trpc_url: "https://civitai.com/api/trpc"
+  trpc_url: "https://civitai.red/api/trpc"
   # Items per page when fetching collections
   page_size: 100
   # OPTIMIZATION: Limit how many pages to fetch per collection (0 = unlimited, N = only fetch first N pages)

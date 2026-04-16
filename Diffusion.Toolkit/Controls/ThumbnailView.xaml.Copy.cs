@@ -25,7 +25,7 @@ namespace Diffusion.Toolkit.Controls
                 {
                     var modelVersion = await client.GetModelVersionsByHashAsync(hash, CancellationToken.None);
 
-                    Process.Start("explorer.exe", $"\"https://civitai.com/models/{modelVersion.ModelId}?modelVersionId={modelVersion.Id}\"");
+                    Process.Start("explorer.exe", $"\"https://civitai.red/models/{modelVersion.ModelId}?modelVersionId={modelVersion.Id}\"");
                 }
                 catch (CivitaiRequestException e) when (e.StatusCode == HttpStatusCode.NotFound)
                 {

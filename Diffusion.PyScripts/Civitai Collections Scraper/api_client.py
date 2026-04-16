@@ -69,7 +69,7 @@ class CivitAIClient:
         from http.cookiejar import Cookie
 
         # First, try to load from cookies.txt file
-        cookie_file = Path(__file__).parent / 'civitai.com_cookies.txt'
+        cookie_file = Path(__file__).parent / 'civitai.red_cookies.txt'
 
         if cookie_file.exists():
             try:
@@ -128,7 +128,7 @@ class CivitAIClient:
         # Fallback: try to load from Chrome browser
         try:
             logger.info("Loading cookies from Chrome...")
-            cookies = browser_cookie3.chrome(domain_name='civitai.com')
+            cookies = browser_cookie3.chrome(domain_name='civitai.red')
 
             cookie_count = 0
             for cookie in cookies:
@@ -320,6 +320,86 @@ class CivitAIClient:
         except Exception as e:
             logger.warning(f"Could not fetch collection info: {e}")
             return Collection(id=collection_id, name=f'Collection {collection_id}')
+
+    def get_user_collections(self) -> List[Collection]:
+        """
+        Fetch the authenticated user's collections using the tRPC API.
+        Requires valid cookie-based authentication.
+        Returns a list of Collection objects, or raises an exception on auth failure.
+        """
+        # Use the tRPC endpoint (same as the website uses with cookies)
+        collections = []
+        cursor = None
+
+        while True:
+            input_data = {
+                "limit": 100,
+                "sort": "Newest",
+            }
+            if cursor is not None:
+                input_data["cursor"] = cursor
+
+            trpc_input = {"json": input_data}
+            params = {
+                "input": json.dumps(trpc_input, separators=(',', ':'))
+            }
+
+            url = f"{self.trpc_url}/collection.getAllUser"
+            resp = self.session.get(url, params=params, timeout=15)
+
+            if resp.status_code == 401:
+                raise PermissionError("Authentication failed (401). Your CivitAI cookies are expired. Please re-export them.")
+
+            if resp.status_code != 200:
+                raise ConnectionError(f"Failed to fetch collections (HTTP {resp.status_code})")
+
+            data = resp.json()
+            result_json = data.get('result', {}).get('data', {}).get('json', {})
+
+            # Debug: log the response structure on first page
+            if cursor is None:
+                logger.debug(f"collection.getAllUser response type: {type(result_json)}")
+                if isinstance(result_json, list) and result_json:
+                    logger.debug(f"First item keys: {list(result_json[0].keys()) if isinstance(result_json[0], dict) else type(result_json[0])}")
+                elif isinstance(result_json, dict):
+                    logger.debug(f"Response keys: {list(result_json.keys())}")
+
+            # tRPC response may be a list directly or a dict with 'items' key
+            if isinstance(result_json, list):
+                items = result_json
+                next_cursor = None
+            elif isinstance(result_json, dict):
+                items = result_json.get('items', [])
+                next_cursor = result_json.get('nextCursor')
+            else:
+                logger.warning(f"Unexpected response type: {type(result_json)}")
+                break
+
+            if not items:
+                break
+
+            for item in items:
+                # item could be a dict directly or nested under a key
+                if not isinstance(item, dict):
+                    continue
+                coll_id = item.get('id')
+                if coll_id is None:
+                    continue
+                collections.append(Collection(
+                    id=coll_id,
+                    name=item.get('name', f'Collection {coll_id}'),
+                    image_count=item.get('image', {}).get('count') if isinstance(item.get('image'), dict)
+                        else item.get('metadata', {}).get('imageCount') if isinstance(item.get('metadata'), dict)
+                        else item.get('imageCount')
+                ))
+
+            if not next_cursor:
+                break
+            cursor = next_cursor
+            time.sleep(0.3)
+
+        logger.info(f"Found {len(collections)} user collections")
+        return collections
 
     def download_image(self, image: ImageItem, output_path: Path, original_extension: str = '') -> bool:
         """

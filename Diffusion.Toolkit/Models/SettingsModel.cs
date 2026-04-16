@@ -282,6 +282,22 @@ public class SettingsModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public ObservableCollection<CivitaiCollectionModel> CivitaiCollections
+    {
+        get;
+        set
+        {
+            SetField(ref field, value);
+            RegisterObservableChanges(field);
+        }
+    } = new ObservableCollection<CivitaiCollectionModel>();
+
+    public bool IsFetchingCollections
+    {
+        get;
+        set => SetField(ref field, value, false);
+    }
+
     public string? TokenAnalyzerPath
     {
         get;

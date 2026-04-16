@@ -49,7 +49,7 @@ public partial class CivitaiUploadWindow : Window
             StatusText.Text = "Browser ready. Navigating to CivitAI...";
 
             // Navigate to CivitAI upload page
-            WebView.CoreWebView2.Navigate("https://civitai.com/posts/create");
+            WebView.CoreWebView2.Navigate("https://civitai.red/posts/create");
         }
         catch (Exception ex)
         {
@@ -71,7 +71,7 @@ public partial class CivitaiUploadWindow : Window
 
             // Check if we're on the upload page and haven't uploaded yet
             var url = WebView.CoreWebView2.Source;
-            if (url.Contains("civitai.com/posts/create") && !_uploadAttempted)
+            if (url.Contains("civitai.red/posts/create") && !_uploadAttempted)
             {
                 // Wait a bit for any dynamic content to load
                 await Task.Delay(2000);

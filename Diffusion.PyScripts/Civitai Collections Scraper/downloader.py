@@ -282,6 +282,53 @@ class DownloadOrchestrator:
 
         return self._get_final_stats()
 
+    def verify_downloads(self, collection_id: Optional[int] = None, fix: bool = False) -> Dict[str, Any]:
+        """
+        Verify that completed downloads still exist on disk.
+
+        Args:
+            collection_id: Optional collection to limit the check to.
+            fix: If True, reset missing records to pending so sync re-downloads them.
+
+        Returns:
+            Dict with verification results.
+        """
+        logger.info("Verifying completed downloads...")
+
+        completed = self.state_db.get_completed_items(collection_id)
+        if not completed:
+            logger.info("No completed downloads to verify")
+            return {'total': 0, 'ok': 0, 'missing': 0, 'no_path': 0, 'missing_items': []}
+
+        ok = 0
+        missing = []
+        no_path = 0
+
+        for record in completed:
+            if not record.local_path:
+                no_path += 1
+                continue
+
+            if Path(record.local_path).exists():
+                ok += 1
+            else:
+                missing.append(record)
+                logger.warning(f"MISSING: {record.local_path} (civitai_id={record.civitai_id}, collection={record.collection_name})")
+
+        if fix and missing:
+            ids_to_reset = [r.civitai_id for r in missing]
+            self.state_db.reset_by_ids(ids_to_reset)
+            logger.info(f"Reset {len(ids_to_reset)} records to pending — run 'sync' to re-download them")
+
+        return {
+            'total': len(completed),
+            'ok': ok,
+            'missing': len(missing),
+            'no_path': no_path,
+            'missing_items': missing,
+            'fixed': fix and len(missing) > 0,
+        }
+
     def get_stats(self, collection_id: Optional[int] = None) -> DownloadStats:
         """Get download statistics from database."""
         return self.state_db.get_stats(collection_id)

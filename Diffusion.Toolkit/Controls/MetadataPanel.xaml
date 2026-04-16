@@ -297,7 +297,7 @@
                                     Cursor="Hand"
                                     Padding="5">
                                 <TextBlock TextDecorations="Underline" Foreground="#3399FF">
-                                    <Run Text="https://civitai.com/images/"/><Run Text="{Binding CivitaiImageId, Mode=OneWay}"/>
+                                    <Run Text="https://civitai.red/images/"/><Run Text="{Binding CivitaiImageId, Mode=OneWay}"/>
                                 </TextBlock>
                             </Button>
                         </local:AccordionControl>

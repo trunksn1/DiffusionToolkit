@@ -190,56 +190,6 @@
 
                         <Separator Margin="0,20,0,10"/>
 
-                        <Label Content="Civitai Scraper" FontWeight="Bold"></Label>
-
-                        <StackPanel Orientation="Vertical" Margin="0,10,0,0">
-                            <Label Content="Civitai Pipeline Repository Path:"></Label>
-                            <Grid Margin="0,5,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="120"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Height="26" VerticalContentAlignment="Center" Text="{Binding CivitaiPipelineRepositoryPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"></TextBox>
-                                <Button Height="26" Grid.Column="1" Click="BrowseCivitaiPipelinePath_OnClick" Content="Browse"></Button>
-                            </Grid>
-                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,15" TextWrapping="Wrap"
-                                       Text="Path to the Civitai Pipeline repository folder (e.g., E:\Clouding\Dropbox\INFORMATICA\GitHub\CivitAi Prompt Examiner)"></TextBlock>
-
-                            <Label Content="Default Album for Downloads:"></Label>
-                            <ComboBox x:Name="CivitaiDefaultAlbumComboBox"
-                                      Height="26"
-                                      Margin="0,5,0,10"
-                                      SelectionChanged="CivitaiDefaultAlbumComboBox_SelectionChanged"/>
-
-                            <CheckBox IsChecked="{Binding CivitaiAlwaysPromptForAlbum}"
-                                      Margin="0,0,0,10"
-                                      Content="Always prompt for album selection after download"></CheckBox>
-
-                            <Button Content="Clear Default Album"
-                                    Width="150"
-                                    Height="26"
-                                    HorizontalAlignment="Left"
-                                    Click="ClearCivitaiDefaultAlbum_Click"
-                                    Margin="0,5,0,0"/>
-
-                            <Label Content="Max Pages Per Collection:"
-                                   Margin="0,15,0,0"></Label>
-                            <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
-                                <TextBox Width="60"
-                                         Height="26"
-                                         Text="{Binding CivitaiMaxPagesPerCollection, UpdateSourceTrigger=PropertyChanged}"
-                                         ToolTip="Number of pages to fetch per collection. 0 = all pages (unlimited), N = only fetch first N pages. Each page contains ~100 images."
-                                         VerticalContentAlignment="Center"
-                                         Padding="5,0"/>
-                                <TextBlock Text="(0 = all pages)"
-                                           VerticalAlignment="Center"
-                                           Margin="10,0,0,0"
-                                           Foreground="{DynamicResource MahApps.Brushes.Gray1}"/>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <Separator Margin="0,20,0,10"/>
-
                         <Label Content="Token Analyzer Integration" FontWeight="Bold"></Label>
 
                         <StackPanel Orientation="Vertical" Margin="0,10,0,0">
@@ -292,6 +242,224 @@
                     </StackPanel>
                 </Grid>
 
+            </TabItem>
+            <TabItem x:Name="CivitaiTab" Header="CivitAI">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Width="600" HorizontalAlignment="Left" Margin="10">
+                        <Label Content="CivitAI Scraper Settings" FontWeight="Bold" FontSize="14"></Label>
+
+                        <StackPanel Orientation="Vertical" Margin="0,10,0,0">
+                            <Label Content="Civitai Pipeline Repository Path:"></Label>
+                            <Grid Margin="0,5,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="120"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Height="26" VerticalContentAlignment="Center" Text="{Binding CivitaiPipelineRepositoryPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"></TextBox>
+                                <Button Height="26" Grid.Column="1" Click="BrowseCivitaiPipelinePath_OnClick" Content="Browse"></Button>
+                            </Grid>
+                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,15" TextWrapping="Wrap"
+                                       Text="Path to the Civitai Pipeline repository folder (e.g., E:\Clouding\Dropbox\INFORMATICA\GitHub\CivitAi Prompt Examiner)"></TextBlock>
+
+                            <Label Content="Default Album for Downloads:"></Label>
+                            <ComboBox x:Name="CivitaiDefaultAlbumComboBox"
+                                      Height="26"
+                                      Margin="0,5,0,10"
+                                      SelectionChanged="CivitaiDefaultAlbumComboBox_SelectionChanged"/>
+
+                            <CheckBox IsChecked="{Binding CivitaiAlwaysPromptForAlbum}"
+                                      Margin="0,0,0,10"
+                                      Content="Always prompt for album selection after download"></CheckBox>
+
+                            <Button Content="Clear Default Album"
+                                    Width="150"
+                                    Height="26"
+                                    HorizontalAlignment="Left"
+                                    Click="ClearCivitaiDefaultAlbum_Click"
+                                    Margin="0,5,0,0"/>
+
+                            <Label Content="Max Pages Per Collection:"
+                                   Margin="0,15,0,0"></Label>
+                            <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                <TextBox Width="60"
+                                         Height="26"
+                                         Text="{Binding CivitaiMaxPagesPerCollection, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Number of pages to fetch per collection. 0 = all pages (unlimited), N = only fetch first N pages. Each page contains ~100 images."
+                                         VerticalContentAlignment="Center"
+                                         Padding="5,0"/>
+                                <TextBlock Text="(0 = all pages)"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0"
+                                           Foreground="{DynamicResource MahApps.Brushes.Gray1}"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Separator Margin="0,20,0,10"/>
+
+                        <Label Content="Collections" FontWeight="Bold" FontSize="14"></Label>
+                        <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,5,0,5" TextWrapping="Wrap"
+                                   Text="Select which CivitAI collections to download. Click 'Fetch Collections' to load your collections from CivitAI (requires valid cookies/login)."></TextBlock>
+                        <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,10" TextWrapping="Wrap"
+                                   Text="'Save to folder' = the subfolder name inside your downloads folder where images are saved. This is auto-detected from existing folders when possible. Only change it if you have an existing folder with a different name than the CivitAI collection."></TextBlock>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button x:Name="FetchCollectionsButton"
+                                    Content="Fetch Collections from CivitAI"
+                                    Height="28"
+                                    Padding="15,0"
+                                    Click="FetchCivitaiCollections_Click"/>
+                            <TextBlock x:Name="FetchingText"
+                                       Text="Fetching..."
+                                       VerticalAlignment="Center"
+                                       Margin="10,0,0,0"
+                                       Foreground="{DynamicResource MahApps.Brushes.Gray1}"
+                                       Visibility="Collapsed"/>
+                        </StackPanel>
+
+                        <!-- Column headers -->
+                        <Grid Margin="8,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="30"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="1" Text="CivitAI Collection" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="2" Text="Save to folder" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="3" Text="" FontWeight="SemiBold"/>
+                        </Grid>
+
+                        <Border BorderBrush="{DynamicResource MahApps.Brushes.Gray1}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="5"
+                                MinHeight="120"
+                                MaxHeight="300">
+                            <Grid>
+                                <TextBlock Text="No collections loaded. Click 'Fetch Collections from CivitAI' to load your collections, or add them manually below."
+                                           Foreground="{DynamicResource MahApps.Brushes.Gray1}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           Margin="20">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CivitaiCollections.Count}" Value="0">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <ListBox x:Name="CivitaiCollectionsList"
+                                         ItemsSource="{Binding CivitaiCollections}"
+                                         BorderThickness="0"
+                                         Background="Transparent"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="3,3">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="25"/>
+                                                    <ColumnDefinition Width="175"/>
+                                                    <ColumnDefinition Width="175"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <CheckBox Grid.Column="0"
+                                                          IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                          VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Name}"
+                                                           VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Name}"
+                                                           Margin="5,0,5,0"/>
+                                                <TextBox Grid.Column="2"
+                                                         Text="{Binding FolderName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         Height="22"
+                                                         VerticalContentAlignment="Center"
+                                                         Padding="3,0"
+                                                         ToolTip="The subfolder name where images are saved. Leave empty to use the collection name. Set this to match your existing folder if it differs from the CivitAI name."/>
+                                                <TextBlock Grid.Column="3"
+                                                           VerticalAlignment="Center"
+                                                           Margin="8,0,0,0"
+                                                           Foreground="{DynamicResource MahApps.Brushes.Gray1}"
+                                                           Text="{Binding ImageCount, StringFormat='({0} images)'}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding ImageCount}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="Select All"
+                                    Width="100"
+                                    Height="26"
+                                    Click="CivitaiSelectAll_Click"
+                                    Margin="0,0,10,0"/>
+                            <Button Content="Deselect All"
+                                    Width="100"
+                                    Height="26"
+                                    Click="CivitaiDeselectAll_Click"
+                                    Margin="0,0,10,0"/>
+                            <Button Content="Remove Selected"
+                                    Width="120"
+                                    Height="26"
+                                    Click="CivitaiRemoveCollection_Click"/>
+                        </StackPanel>
+
+                        <Separator Margin="0,15,0,10"/>
+
+                        <Label Content="Add Collection Manually" FontWeight="Bold"></Label>
+                        <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,2,0,8" TextWrapping="Wrap"
+                                   Text="You can find the collection ID in the CivitAI URL: civitai.com/collections/[ID]. The folder name is the subfolder where images are saved (leave empty to use the collection name)."></TextBlock>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="Collection ID:" Margin="0,0,0,3"/>
+                                <TextBox x:Name="CivitaiNewCollectionId"
+                                         Width="80"
+                                         Height="26"
+                                         VerticalContentAlignment="Center"
+                                         Padding="5,0"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="Name:" Margin="0,0,0,3"/>
+                                <TextBox x:Name="CivitaiNewCollectionName"
+                                         Width="140"
+                                         Height="26"
+                                         VerticalContentAlignment="Center"
+                                         Padding="5,0"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="Save to folder:" Margin="0,0,0,3"/>
+                                <TextBox x:Name="CivitaiNewCollectionFolder"
+                                         Width="140"
+                                         Height="26"
+                                         VerticalContentAlignment="Center"
+                                         Padding="5,0"/>
+                            </StackPanel>
+                            <Button Content="Add"
+                                    Width="70"
+                                    Height="26"
+                                    VerticalAlignment="Bottom"
+                                    Click="CivitaiAddCollection_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
             <TabItem Header="{lex:Loc Settings.Checkpoints}">
                 <StackPanel Width="800" HorizontalAlignment="Left" Margin="10">

@@ -1203,7 +1203,7 @@ namespace Diffusion.Toolkit.Pages
                             imageViewModel.CivitaiImageId = civIdMatch.Groups[1].Value;
                             imageViewModel.OpenCivitaiPageCommand = new RelayCommand<object>(_ =>
                             {
-                                var url = $"https://civitai.com/images/{imageViewModel.CivitaiImageId}";
+                                var url = $"https://civitai.red/images/{imageViewModel.CivitaiImageId}";
                                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                                 {
                                     FileName = url,

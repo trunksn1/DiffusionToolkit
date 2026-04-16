@@ -239,6 +239,35 @@ class StateDatabase:
                     VALUES (?, 0, 'unknown', ?, ?)
                 """, (civitai_id, DownloadStatus.SKIPPED.value, reason))
 
+    def get_completed_items(self, collection_id: Optional[int] = None) -> List[DownloadRecord]:
+        """Get all completed download records."""
+        with self._get_connection() as conn:
+            if collection_id:
+                cursor = conn.execute(
+                    "SELECT * FROM downloads WHERE status = ? AND collection_id = ?",
+                    (DownloadStatus.COMPLETED.value, collection_id)
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT * FROM downloads WHERE status = ?",
+                    (DownloadStatus.COMPLETED.value,)
+                )
+            return [self._row_to_record(row) for row in cursor.fetchall()]
+
+    def reset_by_ids(self, civitai_ids: List[int]):
+        """Reset specific download records back to pending so they can be re-downloaded."""
+        if not civitai_ids:
+            return
+        with self._get_connection() as conn:
+            placeholders = ','.join('?' for _ in civitai_ids)
+            conn.execute(f"""
+                UPDATE downloads
+                SET status = ?, error_message = 'reset: file missing on disk',
+                    retry_count = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE civitai_id IN ({placeholders})
+            """, [DownloadStatus.PENDING.value] + list(civitai_ids))
+        logger.info(f"Reset {len(civitai_ids)} records to pending")
+
     def get_failed_items(self, max_retries: int = 3) -> List[DownloadRecord]:
         """Get items that failed but haven't exceeded retry limit."""
         with self._get_connection() as conn:

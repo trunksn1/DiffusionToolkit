@@ -1431,11 +1431,42 @@ namespace Diffusion.Toolkit
                 DateTime dbModifiedBefore = File.Exists(civitaiDbPath) ? File.GetLastWriteTime(civitaiDbPath) : DateTime.MinValue;
                 Logger.Log($"LaunchCivitaiScraper: Database last modified before: {dbModifiedBefore}");
 
+                // Write enabled collections to a temp file for Python to use
+                // If no collections are configured in settings, fall back to config.yaml
+                string collectionsArg = "";
+                if (_settings.CivitaiCollections != null && _settings.CivitaiCollections.Count > 0)
+                {
+                    var enabledCollections = _settings.CivitaiCollections
+                        .Where(c => c.Enabled)
+                        .Select(c => new { id = c.Id, name = string.IsNullOrWhiteSpace(c.FolderName) ? c.Name : c.FolderName })
+                        .ToList();
+
+                    if (enabledCollections.Count > 0)
+                    {
+                        var collectionsFilePath = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                            "DiffusionToolkit", "Civitai", "collections.json");
+                        var json = System.Text.Json.JsonSerializer.Serialize(enabledCollections,
+                            new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
+                        File.WriteAllText(collectionsFilePath, json, new System.Text.UTF8Encoding(false));
+                        collectionsArg = $" --collections-file \"{collectionsFilePath}\"";
+                        Logger.Log($"LaunchCivitaiScraper: Wrote {enabledCollections.Count} enabled collections to {collectionsFilePath}");
+                    }
+                    else
+                    {
+                        Logger.Log("LaunchCivitaiScraper: All collections are disabled, falling back to config.yaml");
+                    }
+                }
+                else
+                {
+                    Logger.Log("LaunchCivitaiScraper: No collections in settings, using config.yaml defaults");
+                }
+
                 // Launch Python process directly with database path override
                 var processInfo = new ProcessStartInfo()
                 {
                     FileName = pythonPath,
-                    Arguments = $"main.py --db-path \"{civitaiDbPath}\" --max-pages {_settings.CivitaiMaxPagesPerCollection} sync",
+                    Arguments = $"main.py --db-path \"{civitaiDbPath}\" --max-pages {_settings.CivitaiMaxPagesPerCollection}{collectionsArg} sync",
                     WorkingDirectory = scriptsBasePath,
                     UseShellExecute = true,  // Show console window
                     CreateNoWindow = false

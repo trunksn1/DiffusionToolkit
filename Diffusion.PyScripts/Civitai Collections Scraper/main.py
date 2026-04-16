@@ -167,7 +167,7 @@ def cmd_sync(args, orchestrator: DownloadOrchestrator, config: dict):
         # If ALL collections returned 0 images from the API, cookies are likely expired.
         # (All-already-downloaded would show total_images > 0 since those are counted as skipped.)
         if total_stats['total_images'] == 0 and len(collections) > 0:
-            cookie_file = Path(__file__).parent / 'civitai.com_cookies.txt'
+            cookie_file = Path(__file__).parent / 'civitai.red_cookies.txt'
             print("\n" + "=" * 60)
             print("WARNING: No images were found in any collection!")
             print("=" * 60)
@@ -392,11 +392,73 @@ def cmd_test_auth(args, orchestrator: DownloadOrchestrator, config: dict):
         print("  4. Run this script again")
 
 
+def cmd_verify(args, orchestrator: DownloadOrchestrator, config: dict):
+    """Verify completed downloads still exist on disk."""
+    collection_id = args.collection if args.collection else None
+    results = orchestrator.verify_downloads(collection_id, fix=args.fix)
+
+    print("\n" + "="*60)
+    print("DOWNLOAD VERIFICATION")
+    print("="*60)
+    print(f"\n  Completed records checked: {results['total']}")
+    print(f"  Files OK:                  {results['ok']}")
+    print(f"  Files MISSING:             {results['missing']}")
+    if results['no_path']:
+        print(f"  No path recorded:          {results['no_path']}")
+
+    if results['missing'] > 0:
+        print(f"\n  Missing files:")
+        for record in results['missing_items'][:20]:
+            print(f"    - [{record.collection_name}] ID {record.civitai_id}: {record.local_path}")
+        if results['missing'] > 20:
+            print(f"    ... and {results['missing'] - 20} more")
+
+        if results.get('fixed'):
+            print(f"\n  {results['missing']} records reset to pending.")
+            print("  Run 'sync' to re-download the missing files.")
+        elif not args.fix:
+            print(f"\n  To reset these so 'sync' re-downloads them, run:")
+            print(f"    python main.py verify --fix")
+    else:
+        print("\n  All files accounted for!")
+
+    print()
+
+
 def cmd_cleanup(args, orchestrator: DownloadOrchestrator, config: dict):
     """Cleanup old failed downloads from database."""
     days = args.days or 30
     orchestrator.state_db.cleanup_old_failed(days)
     print(f"Cleaned up failed downloads older than {days} days")
+
+
+def cmd_list_collections(args, orchestrator: DownloadOrchestrator, config: dict):
+    """List the authenticated user's CivitAI collections as JSON to stdout."""
+    import json as json_module
+
+    # sys.stdout was redirected to stderr in main() for this command.
+    # Use the real stdout (saved as __stdout__) for JSON output.
+    real_stdout = sys.__stdout__
+
+    try:
+        collections = orchestrator.api_client.get_user_collections()
+    except PermissionError as e:
+        # Auth failure - output error JSON and exit with code 2
+        print(json_module.dumps({"error": "auth", "message": str(e)}), file=real_stdout)
+        sys.exit(2)
+    except Exception as e:
+        print(json_module.dumps({"error": "unknown", "message": str(e)}), file=real_stdout)
+        sys.exit(1)
+
+    result = []
+    for c in collections:
+        entry = {"id": c.id, "name": c.name}
+        if c.image_count is not None:
+            entry["image_count"] = c.image_count
+        result.append(entry)
+
+    # Output clean JSON to real stdout (C# will parse this)
+    print(json_module.dumps(result, ensure_ascii=False, indent=2), file=real_stdout)
 
 
 def main():
@@ -423,6 +485,8 @@ Examples:
                         help='Override database path (used by Diffusion Toolkit integration)')
     parser.add_argument('--max-pages', type=int, default=None,
                         help='Max pages per collection (0=unlimited, used by Diffusion Toolkit integration)')
+    parser.add_argument('--collections-file', type=str,
+                        help='JSON file with collections to sync (overrides config.yaml collections)')
 
     # Subcommands
     subparsers = parser.add_subparsers(dest='command', help='Command to run')
@@ -456,7 +520,27 @@ Examples:
     cleanup_parser.add_argument('--days', type=int, default=30,
                                 help='Remove failures older than N days')
 
+    # Verify command
+    verify_parser = subparsers.add_parser('verify',
+                                          help='Check that completed downloads still exist on disk')
+    verify_parser.add_argument('-c', '--collection', type=int,
+                               help='Only verify downloads from this collection')
+    verify_parser.add_argument('--fix', action='store_true',
+                               help='Reset missing files to pending so sync re-downloads them')
+
+    # List collections command
+    list_collections_parser = subparsers.add_parser('list-collections',
+                                                      help='List user collections as JSON')
+
     args = parser.parse_args()
+
+    # For list-collections, we need clean stdout (JSON only).
+    # Redirect all console output to stderr before anything else logs to stdout.
+    if args.command == 'list-collections':
+        import io
+        # Redirect print() and logging to stderr so stdout stays clean for JSON
+        sys.stdout = sys.stderr
+        # We'll restore stdout only when we need to output JSON
 
     # Load configuration
     try:
@@ -474,6 +558,18 @@ Examples:
     if args.max_pages is not None:
         print(f"Using max pages override: {args.max_pages}")
         config['api']['max_pages_per_collection'] = args.max_pages
+
+    # Override collections if file provided (for Diffusion Toolkit integration)
+    if args.collections_file:
+        import json as json_module
+        try:
+            with open(args.collections_file, 'r', encoding='utf-8') as f:
+                collections_override = json_module.load(f)
+            config['collections'] = collections_override
+            print(f"Using collections override: {len(collections_override)} collections from {args.collections_file}")
+        except Exception as e:
+            print(f"Error reading collections file: {e}")
+            sys.exit(1)
 
     # Setup logging
     setup_logging(config)
@@ -495,7 +591,9 @@ Examples:
         'retry': cmd_retry,
         'stats': cmd_stats,
         'test-auth': cmd_test_auth,
+        'verify': cmd_verify,
         'cleanup': cmd_cleanup,
+        'list-collections': cmd_list_collections,
     }
 
     try:
