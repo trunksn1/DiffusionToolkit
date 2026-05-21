@@ -54,69 +54,133 @@ class CivitAIClient:
         session.mount("http://", adapter)
         session.mount("https://", adapter)
 
-        # Set headers
+        # Set headers.
+        # IMPORTANT: civitai.red enforces an origin check on authenticated tRPC
+        # endpoints - requests without a matching Referer/Origin are rejected with
+        # 401 even when the session cookies are valid. The browser always sends
+        # these, so the site works there but the script previously did not. Send
+        # them so authenticated collection/image queries succeed.
+        host = self._api_host()
         session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json',
             'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': f'https://{host}/',
+            'Origin': f'https://{host}',
         })
 
         return session
 
+    def _api_host(self) -> str:
+        """The host the API actually talks to (e.g. 'civitai.red'), derived from config."""
+        from urllib.parse import urlparse
+        host = urlparse(self.api_base).hostname or 'civitai.red'
+        return host
+
+    def _find_cookie_file(self):
+        """Locate a cookies.txt file, preferring one that matches the API host.
+
+        The Get cookies.txt extension names the export after the site's domain
+        (e.g. civitai.red_cookies.txt or civitai.com_cookies.txt). Accept either,
+        and any other civitai*_cookies.txt the user may have dropped in.
+        """
+        from pathlib import Path
+        script_dir = Path(__file__).parent
+        host = self._api_host()
+
+        # Preference order: exact host match, then the other known site, then any match.
+        preferred = [
+            script_dir / f'{host}_cookies.txt',
+            script_dir / 'civitai.red_cookies.txt',
+            script_dir / 'civitai.com_cookies.txt',
+        ]
+        for candidate in preferred:
+            if candidate.exists():
+                return candidate
+
+        matches = sorted(script_dir.glob('civitai*_cookies.txt'))
+        return matches[0] if matches else None
+
     def _load_cookies(self):
         """Load cookies from file or Chrome browser."""
-        from pathlib import Path
         from http.cookiejar import Cookie
 
-        # First, try to load from cookies.txt file
-        cookie_file = Path(__file__).parent / 'civitai.red_cookies.txt'
+        api_host = self._api_host()
 
-        if cookie_file.exists():
+        def add_cookie(domain, path, secure, expiration, name, value):
+            """Register a cookie, and mirror it onto the API host if needed.
+
+            requests only sends a cookie when its domain matches the request host.
+            Cookies exported from civitai.com are scoped to .civitai.com and would
+            never be sent to civitai.red, so we also register a copy on the API host.
+            """
+            try:
+                expires = int(expiration) if expiration not in ('0', '') else None
+            except ValueError:
+                expires = None
+
+            domains = [domain]
+            # Mirror onto the API host when the source domain wouldn't cover it.
+            bare = domain.lstrip('.')
+            if bare != api_host and not api_host.endswith('.' + bare):
+                domains.append('.' + api_host)
+
+            for d in domains:
+                cookie = Cookie(
+                    version=0,
+                    name=name,
+                    value=value,
+                    port=None,
+                    port_specified=False,
+                    domain=d,
+                    domain_specified=True,
+                    domain_initial_dot=d.startswith('.'),
+                    path=path or '/',
+                    path_specified=True,
+                    secure=secure == 'TRUE',
+                    expires=expires,
+                    discard=False,
+                    comment=None,
+                    comment_url=None,
+                    rest={},
+                    rfc2109=False
+                )
+                self.session.cookies.set_cookie(cookie)
+
+        # First, try to load from a cookies.txt file
+        cookie_file = self._find_cookie_file()
+
+        if cookie_file is not None:
             try:
                 logger.info(f"Loading cookies from file: {cookie_file.name}")
                 cookie_count = 0
 
                 with open(cookie_file, 'r', encoding='utf-8') as f:
                     for line in f:
-                        line = line.strip()
-                        # Skip comments and empty lines
-                        if not line or line.startswith('#'):
+                        line = line.rstrip('\n').rstrip('\r')
+                        if not line.strip():
                             continue
 
-                        # Parse Netscape cookie format
+                        # The Netscape format marks HttpOnly cookies with a
+                        # "#HttpOnly_" prefix on the domain. Keep those (the auth
+                        # token is often HttpOnly); skip only real comment lines.
+                        if line.startswith('#'):
+                            if line.startswith('#HttpOnly_'):
+                                line = line[len('#HttpOnly_'):]
+                            else:
+                                continue
+
                         # Format: domain, flag, path, secure, expiration, name, value
                         parts = line.split('\t')
                         if len(parts) != 7:
                             continue
 
                         domain, flag, path, secure, expiration, name, value = parts
-
-                        # Create cookie
-                        cookie = Cookie(
-                            version=0,
-                            name=name,
-                            value=value,
-                            port=None,
-                            port_specified=False,
-                            domain=domain,
-                            domain_specified=True,
-                            domain_initial_dot=domain.startswith('.'),
-                            path=path,
-                            path_specified=True,
-                            secure=secure == 'TRUE',
-                            expires=int(expiration) if expiration != '0' else None,
-                            discard=False,
-                            comment=None,
-                            comment_url=None,
-                            rest={},
-                            rfc2109=False
-                        )
-
-                        self.session.cookies.set_cookie(cookie)
+                        add_cookie(domain, path, secure, expiration, name, value)
                         cookie_count += 1
 
                 if cookie_count > 0:
-                    logger.info(f"Loaded {cookie_count} cookies from file")
+                    logger.info(f"Loaded {cookie_count} cookies from file (host: {api_host})")
                     return
                 else:
                     logger.warning("Cookie file exists but no valid cookies found")
@@ -127,8 +191,8 @@ class CivitAIClient:
 
         # Fallback: try to load from Chrome browser
         try:
-            logger.info("Loading cookies from Chrome...")
-            cookies = browser_cookie3.chrome(domain_name='civitai.red')
+            logger.info(f"Loading cookies from Chrome (domain: {api_host})...")
+            cookies = browser_cookie3.chrome(domain_name=api_host)
 
             cookie_count = 0
             for cookie in cookies:
@@ -139,22 +203,35 @@ class CivitAIClient:
                 logger.info(f"Loaded {cookie_count} cookies from Chrome")
             else:
                 logger.warning("No cookies found! You may not be able to access NSFW content.")
-                logger.warning("Make sure you're logged into CivitAI in Chrome.")
+                logger.warning(f"Make sure you're logged into {api_host} in Chrome,")
+                logger.warning(f"or export cookies from {api_host} into '{api_host}_cookies.txt'.")
 
         except Exception as e:
             logger.error(f"Failed to load cookies: {e}")
             logger.warning("Continuing without authentication - NSFW content may not be accessible")
 
     def test_authentication(self) -> bool:
-        """Test if we're authenticated by checking user session."""
+        """Test if our cookies form a valid authenticated session.
+
+        Uses the tRPC endpoint the scraper actually relies on (cookie-based
+        session auth), NOT the REST /v1/users/me endpoint - that one expects an
+        API-key Bearer token and returns 401 for cookie sessions, which made this
+        check report failure even with perfectly valid cookies.
+        """
         try:
-            response = self.session.get(f"{self.api_base}/v1/users/me", timeout=10)
+            trpc_input = {"json": {"limit": 1, "sort": "Newest"}}
+            params = {"input": json.dumps(trpc_input, separators=(',', ':'))}
+            response = self.session.get(
+                f"{self.trpc_url}/collection.getAllUser",
+                params=params,
+                timeout=10,
+            )
             if response.status_code == 200:
-                user_data = response.json()
-                logger.info(f"Authenticated as: {user_data.get('username', 'Unknown')}")
+                logger.info("Authenticated: cookies accepted by tRPC API")
                 return True
             elif response.status_code == 401:
-                logger.warning("Not authenticated - some content may be inaccessible")
+                logger.warning("Not authenticated (401) - cookies missing/expired, "
+                               "or Referer/Origin not accepted")
                 return False
             else:
                 logger.warning(f"Authentication check returned status {response.status_code}")
