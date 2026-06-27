@@ -220,73 +220,69 @@
                             </ItemsControl>
                         </local:AccordionControl>
 
-                        <local:AccordionControl x:Name="UserMetadataAccordion"
-                                                   Margin="0,0,0,5"
-                                                   HeaderBackground="#80000000"
-                                                   ToolTip="{lex:Loc UserMetadata.ManualTooltip}"
-                                                   State="{Binding MetadataSection.UserMetadataState, RelativeSource={RelativeSource AncestorLevel=1, Mode=FindAncestor, AncestorType=UserControl}, Mode=TwoWay}"
-                                                   Header="{lex:Loc UserMetadata.Header}">
-                            <local:AccordionControl.ButtonAreaContent>
-                                <Grid Background="{x:Null}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Button Style="{DynamicResource BorderlessButton}" Grid.Column="1" Margin="0,0,8,0"
-                                            Command="{Binding AddUserMetadataCommand}" Content="{lex:Loc UserMetadata.Add}"/>
-                                    <Button Style="{DynamicResource BorderlessButton}" Grid.Column="2"
-                                            Command="{Binding FetchFromCivitaiCommand}" Content="{lex:Loc UserMetadata.FetchCivitai}"/>
-                                </Grid>
-                            </local:AccordionControl.ButtonAreaContent>
-                            <ItemsControl ItemsSource="{Binding UserMetadata}">
-                                <ItemsControl.Resources>
-                                    <common:BindingProxy x:Key="Proxy" Data="{Binding .}" />
-                                </ItemsControl.Resources>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border BorderThickness="1" BorderBrush="{StaticResource SecondaryBrush}" CornerRadius="5" Margin="5,2"
-                                                ToolTip="{lex:Loc UserMetadata.ManualTooltip}">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0" Orientation="Vertical" Margin="5,3">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="&#x270E;" FontSize="12"
-                                                                   Foreground="{StaticResource SecondaryBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                                        <TextBlock Text="{Binding Key}" FontSize="13" FontWeight="Bold"
-                                                                   Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center"/>
-                                                    </StackPanel>
-                                                    <TextBox FontSize="14" BorderThickness="0" IsReadOnly="True" Padding="0,2,0,0"
-                                                             Background="Transparent" TextWrapping="WrapWithOverflow" Text="{Binding Value}"/>
-                                                </StackPanel>
-                                                <Button Grid.Column="1" Style="{StaticResource BorderlessButton}"
-                                                        Visibility="{Binding HasSourceUrl, Converter={StaticResource boolToVis}}"
-                                                        Command="{Binding Source={StaticResource Proxy}, Path=Data.OpenSourceUrlCommand}"
-                                                        CommandParameter="{Binding .}"
-                                                        ToolTip="{Binding SourceUrl}"
-                                                        Margin="0,5,2,5" Padding="5,0">&#x1F517;</Button>
-                                                <Button Grid.Column="2" Style="{StaticResource BorderlessButton}"
-                                                        Command="{Binding Source={StaticResource Proxy}, Path=Data.EditUserMetadataCommand}"
-                                                        CommandParameter="{Binding .}"
-                                                        Margin="0,5,2,5" Padding="5,0">&#x270E;</Button>
-                                                <Button Grid.Column="3" Style="{StaticResource BorderlessButton}"
-                                                        Command="{Binding Source={StaticResource Proxy}, Path=Data.DeleteUserMetadataCommand}"
-                                                        CommandParameter="{Binding .}"
-                                                        Margin="0,5,5,5" Padding="5,0">X</Button>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </local:AccordionControl>
-
                     </StackPanel>
                 </ScrollViewer>
+            </TabItem>
+            <TabItem Header="User Metadata" Background="Transparent" GotFocus="UIElement_OnGotFocus" HorizontalContentAlignment="Stretch"
+                     ToolTip="{lex:Loc UserMetadata.ManualTooltip}">
+                <Grid Background="Transparent">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="5,5,5,8">
+                        <Button Style="{DynamicResource BorderlessButton}" Margin="0,0,8,0"
+                                Command="{Binding AddUserMetadataCommand}" Content="{lex:Loc UserMetadata.Add}"/>
+                        <Button Style="{DynamicResource BorderlessButton}"
+                                Command="{Binding FetchFromCivitaiCommand}" Content="{lex:Loc UserMetadata.FetchCivitai}"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" Background="Transparent" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding UserMetadata}">
+                            <ItemsControl.Resources>
+                                <common:BindingProxy x:Key="Proxy" Data="{Binding .}" />
+                            </ItemsControl.Resources>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderThickness="1" BorderBrush="{StaticResource SecondaryBrush}" CornerRadius="5" Margin="5,2"
+                                            ToolTip="{lex:Loc UserMetadata.ManualTooltip}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Orientation="Vertical" Margin="5,3">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="&#x270E;" FontSize="12"
+                                                               Foreground="{StaticResource SecondaryBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{Binding Key}" FontSize="13" FontWeight="Bold"
+                                                               Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                                <TextBox FontSize="14" BorderThickness="0" IsReadOnly="True" Padding="0,2,0,0"
+                                                         Background="Transparent" TextWrapping="WrapWithOverflow" Text="{Binding Value}"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Style="{StaticResource BorderlessButton}"
+                                                    Visibility="{Binding HasSourceUrl, Converter={StaticResource boolToVis}}"
+                                                    Command="{Binding Source={StaticResource Proxy}, Path=Data.OpenSourceUrlCommand}"
+                                                    CommandParameter="{Binding .}"
+                                                    ToolTip="{Binding SourceUrl}"
+                                                    Margin="0,5,2,5" Padding="5,0">&#x1F517;</Button>
+                                            <Button Grid.Column="2" Style="{StaticResource BorderlessButton}"
+                                                    Command="{Binding Source={StaticResource Proxy}, Path=Data.EditUserMetadataCommand}"
+                                                    CommandParameter="{Binding .}"
+                                                    Margin="0,5,2,5" Padding="5,0">&#x270E;</Button>
+                                            <Button Grid.Column="3" Style="{StaticResource BorderlessButton}"
+                                                    Command="{Binding Source={StaticResource Proxy}, Path=Data.DeleteUserMetadataCommand}"
+                                                    CommandParameter="{Binding .}"
+                                                    Margin="0,5,5,5" Padding="5,0">X</Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
             </TabItem>
             <TabItem Header="Tags" Background="Transparent" GotFocus="UIElement_OnGotFocus"  HorizontalContentAlignment="Stretch">
 
