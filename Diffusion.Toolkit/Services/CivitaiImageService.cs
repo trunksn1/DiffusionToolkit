@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Diffusion.Common;
 using Diffusion.Civitai;
 using Diffusion.Civitai.Models;
 using Diffusion.Toolkit.Localization;
@@ -52,21 +53,30 @@ public class CivitaiImageService
 
         var url = $"https://civitai.com/images/{imageId}";
 
-        CivitaiImageGenerationData? data;
+        CivitaiImageGenerationData? data = null;
+        string? fetchError = null;
         try
         {
             using var client = new CivitaiClient();
             data = await client.FetchImageGenerationDataAsync(imageId, CancellationToken.None);
+            fetchError = client.LastError;
         }
-        catch
+        catch (Exception ex)
         {
-            data = null;
+            fetchError = ex.Message;
         }
 
         var pairs = data?.ToOrderedPairs();
 
         if (pairs == null || pairs.Count == 0)
         {
+            // Record why nothing came back so a future endpoint/header change is debuggable rather
+            // than surfacing only the generic "no data" message to the user.
+            if (!string.IsNullOrEmpty(fetchError))
+            {
+                Logger.Log($"CivitAI fetch for {url} returned no data: {fetchError}");
+            }
+
             await ServiceLocator.MessageService.Show(
                 GetLocalizedText("UserMetadata.Fetch.NoData"),
                 GetLocalizedText("UserMetadata.Fetch.Title"),

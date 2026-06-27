@@ -63,8 +63,18 @@ public class CivitaiClient : IDisposable
     /// callers can fall back to manual entry. Isolated here so the strategy can be swapped/repaired
     /// in one place.
     /// </summary>
+    /// <summary>
+    /// Diagnostic message describing the most recent failure of
+    /// <see cref="FetchImageGenerationDataAsync"/> (HTTP status, parse miss, timeout, …), or null on
+    /// success. The unofficial endpoint never throws, so callers inspect this to log why a fetch
+    /// returned no data.
+    /// </summary>
+    public string? LastError { get; private set; }
+
     public async Task<CivitaiImageGenerationData?> FetchImageGenerationDataAsync(long imageId, CancellationToken token)
     {
+        LastError = null;
+
         try
         {
             // tRPC superjson input envelope: {"json":{"id":<imageId>}}
@@ -72,29 +82,59 @@ public class CivitaiClient : IDisposable
             var url = $"https://civitai.com/api/trpc/image.getGenerationData?input={input}";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            // Some Civitai endpoints reject requests without a browser-like UA.
+            // Civitai rejects this tRPC endpoint with 401 ("Please use the public API instead")
+            // unless the request looks like it came from the website: a real browser User-Agent plus
+            // matching Referer/Origin. This is the same origin check the civitai.red scraper fix
+            // addressed. Cookies are NOT required for public images.
             request.Headers.TryAddWithoutValidation("User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) DiffusionToolkit");
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36");
             request.Headers.TryAddWithoutValidation("Accept", "application/json");
+            request.Headers.TryAddWithoutValidation("Referer", "https://civitai.com/");
+            request.Headers.TryAddWithoutValidation("Origin", "https://civitai.com");
 
             var response = await _httpClient.SendAsync(request, token);
             if (!response.IsSuccessStatusCode)
             {
+                var snippet = await SafeReadSnippetAsync(response, token);
+                LastError = $"HTTP {(int)response.StatusCode} {response.StatusCode} from image.getGenerationData for id {imageId}. {snippet}".Trim();
                 return null;
             }
 
             var body = await response.Content.ReadAsStringAsync(token);
 
-            return ParseGenerationData(body);
+            var parsed = ParseGenerationData(body);
+            if (parsed == null)
+            {
+                LastError = $"Response for id {imageId} had no parsable 'meta' generation block (image may have no embedded metadata).";
+            }
+
+            return parsed;
         }
         catch (TaskCanceledException)
         {
+            LastError = $"Request for id {imageId} timed out or was cancelled.";
             return null;
+        }
+        catch (Exception ex)
+        {
+            // Unofficial endpoint: never throw to the caller.
+            LastError = $"Request for id {imageId} failed: {ex.Message}";
+            return null;
+        }
+    }
+
+    /// <summary>Reads a short, exception-safe snippet of a (typically error) response body for logging.</summary>
+    private static async Task<string> SafeReadSnippetAsync(HttpResponseMessage response, CancellationToken token)
+    {
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(token);
+            if (string.IsNullOrWhiteSpace(body)) return string.Empty;
+            return body.Length > 200 ? body.Substring(0, 200) + "…" : body;
         }
         catch
         {
-            // Unofficial endpoint: never throw to the caller.
-            return null;
+            return string.Empty;
         }
     }
 
