@@ -2,6 +2,7 @@
 using Diffusion.Toolkit.Classes;
 using Diffusion.Toolkit.Controls;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Diffusion.Common;
@@ -32,6 +33,15 @@ public class ImageViewModel : BaseNotify
     private ICommand? _saveLoraRiforgiatiCommand;
     private string? _civitaiImageId;
     private ICommand? _openCivitaiPageCommand;
+
+    private string? _hash;
+    private ObservableCollection<UserMetadataItemViewModel> _userMetadata = new();
+    private bool _hasUserMetadata;
+    private ICommand _addUserMetadataCommand;
+    private ICommand _editUserMetadataCommand;
+    private ICommand _deleteUserMetadataCommand;
+    private ICommand _fetchFromCivitaiCommand;
+    private ICommand _openSourceUrlCommand;
 
     public ImageViewModel()
     {
@@ -396,6 +406,68 @@ public class ImageViewModel : BaseNotify
     {
         get => _openCivitaiPageCommand;
         set => SetField(ref _openCivitaiPageCommand, value);
+    }
+
+    /// <summary>
+    /// SHA-256 of the underlying file. Used as the key for the user-metadata overlay so it
+    /// survives rescans, moves and rebuilds. Populated from FileParameters.Hash on load.
+    /// </summary>
+    public string? Hash
+    {
+        get => _hash;
+        set => SetField(ref _hash, value);
+    }
+
+    /// <summary>
+    /// User-supplied overlay metadata for this image (never written into the image file or
+    /// the scanner-owned columns).
+    /// </summary>
+    public ObservableCollection<UserMetadataItemViewModel> UserMetadata
+    {
+        get => _userMetadata;
+        set
+        {
+            if (SetField(ref _userMetadata, value))
+            {
+                HasUserMetadata = value != null && value.Count > 0;
+            }
+        }
+    }
+
+    public bool HasUserMetadata
+    {
+        get => _hasUserMetadata;
+        set => SetField(ref _hasUserMetadata, value);
+    }
+
+    public ICommand AddUserMetadataCommand
+    {
+        get => _addUserMetadataCommand;
+        set => SetField(ref _addUserMetadataCommand, value);
+    }
+
+    public ICommand EditUserMetadataCommand
+    {
+        get => _editUserMetadataCommand;
+        set => SetField(ref _editUserMetadataCommand, value);
+    }
+
+    public ICommand DeleteUserMetadataCommand
+    {
+        get => _deleteUserMetadataCommand;
+        set => SetField(ref _deleteUserMetadataCommand, value);
+    }
+
+    public ICommand FetchFromCivitaiCommand
+    {
+        get => _fetchFromCivitaiCommand;
+        set => SetField(ref _fetchFromCivitaiCommand, value);
+    }
+
+    public ICommand OpenSourceUrlCommand
+    {
+        get => _openSourceUrlCommand;
+        set => SetField(ref _openSourceUrlCommand, value);
     }
 }
 

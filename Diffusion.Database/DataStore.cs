@@ -190,6 +190,9 @@ public partial class DataStore
                 db.CreateTable<SmartAlbum>();
                 db.CreateIndex<SmartAlbum>(sa => sa.Name);
 
+                db.CreateTable<UserMetadata>();
+                db.CreateIndex<UserMetadata>(meta => meta.FileHash);
+
             }
             finally
             {

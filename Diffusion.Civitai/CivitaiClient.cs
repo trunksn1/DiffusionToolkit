@@ -55,6 +55,132 @@ public class CivitaiClient : IDisposable
         return await GetResponseResults<ModelVersion2>(_httpClient, apiUrl, token);
     }
 
+    /// <summary>
+    /// Fetches generation data (prompt, sampler, cfg, steps, seed, …) for a single image by its id,
+    /// using Civitai's UNOFFICIAL internal tRPC endpoint (the same call the website makes). There is
+    /// no documented public REST endpoint to look up an image by id, so this is best-effort: the
+    /// response shape is unversioned and may change without notice. Returns null on any failure so
+    /// callers can fall back to manual entry. Isolated here so the strategy can be swapped/repaired
+    /// in one place.
+    /// </summary>
+    public async Task<CivitaiImageGenerationData?> FetchImageGenerationDataAsync(long imageId, CancellationToken token)
+    {
+        try
+        {
+            // tRPC superjson input envelope: {"json":{"id":<imageId>}}
+            var input = Uri.EscapeDataString($"{{\"json\":{{\"id\":{imageId}}}}}");
+            var url = $"https://civitai.com/api/trpc/image.getGenerationData?input={input}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            // Some Civitai endpoints reject requests without a browser-like UA.
+            request.Headers.TryAddWithoutValidation("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) DiffusionToolkit");
+            request.Headers.TryAddWithoutValidation("Accept", "application/json");
+
+            var response = await _httpClient.SendAsync(request, token);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(token);
+
+            return ParseGenerationData(body);
+        }
+        catch (TaskCanceledException)
+        {
+            return null;
+        }
+        catch
+        {
+            // Unofficial endpoint: never throw to the caller.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Defensively parses the tRPC response body into <see cref="CivitaiImageGenerationData"/>.
+    /// Expected shape: { result: { data: { json: { meta: { ... } } } } } — but every level is
+    /// probed with TryGetProperty so a structural change degrades to null rather than throwing.
+    /// </summary>
+    private static CivitaiImageGenerationData? ParseGenerationData(string body)
+    {
+        using var document = JsonDocument.Parse(body);
+
+        var root = document.RootElement;
+
+        if (!TryGet(root, "result", out var result)) return null;
+        if (!TryGet(result, "data", out var data)) return null;
+        if (!TryGet(data, "json", out var json)) return null;
+
+        // The generation parameters live under "meta"; some responses nest under "meta"/"meta".
+        if (!TryGet(json, "meta", out var meta) || meta.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var gen = new CivitaiImageGenerationData
+        {
+            Prompt = ReadString(meta, "prompt"),
+            NegativePrompt = ReadString(meta, "negativePrompt"),
+            Sampler = ReadString(meta, "sampler"),
+            CfgScale = ReadString(meta, "cfgScale"),
+            Steps = ReadString(meta, "steps"),
+            Seed = ReadString(meta, "seed"),
+            Model = ReadString(meta, "Model") ?? ReadString(meta, "model"),
+            Size = ReadString(meta, "Size") ?? ReadString(meta, "size"),
+            ClipSkip = ReadString(meta, "clipSkip") ?? ReadString(meta, "Clip skip")
+        };
+
+        // Capture any remaining simple scalar fields we didn't explicitly map.
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "prompt", "negativePrompt", "sampler", "cfgScale", "steps", "seed",
+            "Model", "model", "Size", "size", "clipSkip", "Clip skip"
+        };
+
+        foreach (var property in meta.EnumerateObject())
+        {
+            if (known.Contains(property.Name)) continue;
+
+            var value = ScalarToString(property.Value);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                gen.Extras[property.Name] = value!;
+            }
+        }
+
+        return gen;
+    }
+
+    private static bool TryGet(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out value))
+        {
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static string? ReadString(JsonElement obj, string name)
+    {
+        return obj.TryGetProperty(name, out var value) ? ScalarToString(value) : null;
+    }
+
+    private static string? ScalarToString(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => null
+        };
+    }
+
     private async Task<T> GetResponseResults<T>(HttpClient client, string url, CancellationToken token) where T: class
     {
         T? results = null;

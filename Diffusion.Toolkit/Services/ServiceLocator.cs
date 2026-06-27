@@ -27,6 +27,8 @@ public class ServiceLocator
     private static ThumbnailCache? _thumbnailCache;
     private static ThumbnailService? _thumbnailLoader;
     private static CivitAiExtensionDataStore? _civitAiExtensionDataStore;
+    private static CivitaiImageService? _civitaiImageService;
+    private static UserMetadataService? _userMetadataService;
 
     public static DataStore? DataStore => _dataStore;
     public static Settings? Settings => _settings;
@@ -122,6 +124,16 @@ public class ServiceLocator
     public static ContextMenuService ContextMenuService
     {
         get { return field ??= new ContextMenuService(); }
+    }
+
+    public static CivitaiImageService CivitaiImageService
+    {
+        get { return _civitaiImageService ??= new CivitaiImageService(); }
+    }
+
+    public static UserMetadataService UserMetadataService
+    {
+        get { return _userMetadataService ??= new UserMetadataService(); }
     }
 
     public static ExternalApplicationsService ExternalApplicationsService

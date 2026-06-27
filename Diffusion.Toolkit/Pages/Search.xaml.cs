@@ -1077,6 +1077,12 @@ namespace Diffusion.Toolkit.Pages
                 });
                 imageViewModel.RemoveFromAlbumCommand = new RelayCommand<Album>(RemoveFromAlbum);
 
+                imageViewModel.AddUserMetadataCommand = new RelayCommand<object>(o => AddUserMetadata(imageViewModel));
+                imageViewModel.EditUserMetadataCommand = new RelayCommand<UserMetadataItemViewModel>(item => EditUserMetadata(imageViewModel, item));
+                imageViewModel.DeleteUserMetadataCommand = new RelayCommand<UserMetadataItemViewModel>(item => DeleteUserMetadata(imageViewModel, item));
+                imageViewModel.FetchFromCivitaiCommand = new AsyncCommand<object>(o => FetchUserMetadataFromCivitai(imageViewModel));
+                imageViewModel.OpenSourceUrlCommand = new RelayCommand<UserMetadataItemViewModel>(OpenUserMetadataSourceUrl);
+
                 if (image != null)
                 {
                     imageViewModel.Id = image.Id;
@@ -1123,6 +1129,7 @@ namespace Diffusion.Toolkit.Pages
                     imageViewModel.ErrorMessage = parameters.ErrorMessage;
 
                     imageViewModel.Path = parameters.Path;
+                    imageViewModel.Hash = parameters.Hash;
                     imageViewModel.Prompt = parameters.Prompt?.Trim();
                     imageViewModel.NegativePrompt = parameters.NegativePrompt?.Trim();
                     imageViewModel.OtherParameters = parameters.OtherParameters?.Trim();
@@ -1247,6 +1254,8 @@ namespace Diffusion.Toolkit.Pages
                 }
 
                 _model.CurrentImage = imageViewModel;
+
+                LoadUserMetadata(imageViewModel);
 
                 if (updateViewed)
                 {

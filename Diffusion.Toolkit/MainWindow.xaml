@@ -361,6 +361,9 @@
 
         <Menu x:Name="Menu" Grid.Row="0">
             <MenuItem Header="{lex:Loc Menu.File}">
+                <MenuItem Header="{lex:Loc Menu.File.ExportUserMetadata}" Command="{Binding ExportUserMetadataCommand}"/>
+                <MenuItem Header="{lex:Loc Menu.File.ImportUserMetadata}" Command="{Binding ImportUserMetadataCommand}"/>
+                <Separator/>
                 <MenuItem Header="{lex:Loc Menu.File.Close}" Command="{Binding CloseCommand}"/>
             </MenuItem>
             <MenuItem Header="{lex:Loc Menu.View}">

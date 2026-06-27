@@ -83,6 +83,8 @@ namespace Diffusion.Toolkit
             _model.DownloadCivitai = new RelayCommand<object>((o) => DownloadCivitaiModels());
 
             _model.RebuildThumbnailsCommand = new AsyncCommand<object>(RebuildThumbnailsTask);
+            _model.ExportUserMetadataCommand = new RelayCommand<object>((o) => ExportUserMetadata());
+            _model.ImportUserMetadataCommand = new RelayCommand<object>((o) => ImportUserMetadata());
             _model.FixFoldersCommand = new RelayCommand<object>((o) => FixFolders());
             _model.RemoveExcludedImagesCommand = new RelayCommand<object>((o) => CleanExcludedPaths());
             _model.CleanRemovedFoldersCommand = new AsyncCommand<object>(CleanRemovedFolders);

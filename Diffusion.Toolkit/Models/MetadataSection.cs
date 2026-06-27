@@ -4,6 +4,8 @@ namespace Diffusion.Toolkit.Models;
 
 public class MetadataSection : BaseNotify
 {
+    private AccordionState _userMetadataState;
+
     public AccordionState PromptState
     {
         get;
@@ -62,5 +64,11 @@ public class MetadataSection : BaseNotify
     {
         get;
         set => SetField(ref field, value);
+    }
+
+    public AccordionState UserMetadataState
+    {
+        get => _userMetadataState;
+        set => SetField(ref _userMetadataState, value);
     }
 }

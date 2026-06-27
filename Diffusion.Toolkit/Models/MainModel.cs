@@ -13,6 +13,8 @@ namespace Diffusion.Toolkit.Models;
 
 public class MainModel : BaseNotify
 {
+    private ICommand _exportUserMetadataCommand;
+    private ICommand _importUserMetadataCommand;
     private ICommand _removeMarked;
     private string _status;
     private bool _isPreviewVisible;
@@ -115,6 +117,18 @@ public class MainModel : BaseNotify
     {
         get;
         set => SetField(ref field, value);
+    }
+
+    public ICommand ExportUserMetadataCommand
+    {
+        get => _exportUserMetadataCommand;
+        set => SetField(ref _exportUserMetadataCommand, value);
+    }
+
+    public ICommand ImportUserMetadataCommand
+    {
+        get => _importUserMetadataCommand;
+        set => SetField(ref _importUserMetadataCommand, value);
     }
 
     public ICommand ReloadHashes
