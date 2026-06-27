@@ -251,6 +251,7 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Grid.Column="0" Orientation="Vertical" Margin="5,3">
                                                 <StackPanel Orientation="Horizontal">
@@ -263,16 +264,21 @@
                                                          Background="Transparent" TextWrapping="WrapWithOverflow" Text="{Binding Value}"/>
                                             </StackPanel>
                                             <Button Grid.Column="1" Style="{StaticResource BorderlessButton}"
+                                                    Command="{Binding Source={StaticResource Proxy}, Path=Data.CopyUserMetadataCommand}"
+                                                    CommandParameter="{Binding .}"
+                                                    ToolTip="Copy value to clipboard"
+                                                    Margin="0,5,2,5" Padding="5,0">&#x1F4CB;</Button>
+                                            <Button Grid.Column="2" Style="{StaticResource BorderlessButton}"
                                                     Visibility="{Binding HasSourceUrl, Converter={StaticResource boolToVis}}"
                                                     Command="{Binding Source={StaticResource Proxy}, Path=Data.OpenSourceUrlCommand}"
                                                     CommandParameter="{Binding .}"
                                                     ToolTip="{Binding SourceUrl}"
                                                     Margin="0,5,2,5" Padding="5,0">&#x1F517;</Button>
-                                            <Button Grid.Column="2" Style="{StaticResource BorderlessButton}"
+                                            <Button Grid.Column="3" Style="{StaticResource BorderlessButton}"
                                                     Command="{Binding Source={StaticResource Proxy}, Path=Data.EditUserMetadataCommand}"
                                                     CommandParameter="{Binding .}"
                                                     Margin="0,5,2,5" Padding="5,0">&#x270E;</Button>
-                                            <Button Grid.Column="3" Style="{StaticResource BorderlessButton}"
+                                            <Button Grid.Column="4" Style="{StaticResource BorderlessButton}"
                                                     Command="{Binding Source={StaticResource Proxy}, Path=Data.DeleteUserMetadataCommand}"
                                                     CommandParameter="{Binding .}"
                                                     Margin="0,5,5,5" Padding="5,0">X</Button>

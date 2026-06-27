@@ -1082,6 +1082,7 @@ namespace Diffusion.Toolkit.Pages
                 imageViewModel.DeleteUserMetadataCommand = new RelayCommand<UserMetadataItemViewModel>(item => DeleteUserMetadata(imageViewModel, item));
                 imageViewModel.FetchFromCivitaiCommand = new AsyncCommand<object>(o => FetchUserMetadataFromCivitai(imageViewModel));
                 imageViewModel.OpenSourceUrlCommand = new RelayCommand<UserMetadataItemViewModel>(OpenUserMetadataSourceUrl);
+                imageViewModel.CopyUserMetadataCommand = new RelayCommand<UserMetadataItemViewModel>(CopyUserMetadata);
 
                 if (image != null)
                 {

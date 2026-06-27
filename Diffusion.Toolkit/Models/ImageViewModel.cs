@@ -42,6 +42,7 @@ public class ImageViewModel : BaseNotify
     private ICommand _deleteUserMetadataCommand;
     private ICommand _fetchFromCivitaiCommand;
     private ICommand _openSourceUrlCommand;
+    private ICommand _copyUserMetadataCommand;
 
     public ImageViewModel()
     {
@@ -468,6 +469,12 @@ public class ImageViewModel : BaseNotify
     {
         get => _openSourceUrlCommand;
         set => SetField(ref _openSourceUrlCommand, value);
+    }
+
+    public ICommand CopyUserMetadataCommand
+    {
+        get => _copyUserMetadataCommand;
+        set => SetField(ref _copyUserMetadataCommand, value);
     }
 }
 

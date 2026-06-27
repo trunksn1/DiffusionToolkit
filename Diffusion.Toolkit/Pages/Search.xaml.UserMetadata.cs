@@ -105,6 +105,21 @@ namespace Diffusion.Toolkit.Pages
             return ServiceLocator.CivitaiImageService.FetchForImageAsync(imageViewModel, imageViewModel.UserMetadata);
         }
 
+        private void CopyUserMetadata(UserMetadataItemViewModel item)
+        {
+            if (item?.Value == null) return;
+
+            try
+            {
+                System.Windows.Clipboard.SetDataObject(item.Value, true);
+                ServiceLocator.ToastService.Toast("Copied to clipboard", "");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to copy user metadata to clipboard: {ex.Message}");
+            }
+        }
+
         private void OpenUserMetadataSourceUrl(UserMetadataItemViewModel item)
         {
             if (item == null || string.IsNullOrWhiteSpace(item.SourceUrl)) return;
