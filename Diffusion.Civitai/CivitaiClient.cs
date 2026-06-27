@@ -140,8 +140,10 @@ public class CivitaiClient : IDisposable
 
     /// <summary>
     /// Defensively parses the tRPC response body into <see cref="CivitaiImageGenerationData"/>.
-    /// Expected shape: { result: { data: { json: { meta: { ... } } } } } — but every level is
-    /// probed with TryGetProperty so a structural change degrades to null rather than throwing.
+    /// Expected shape: { result: { data: { json: { meta: { … }, resources: [ … ] } } } } — but every
+    /// level is probed with TryGetProperty so a structural change degrades to null rather than throwing.
+    /// Many images have <c>meta: null</c> while still exposing <c>resources</c>, so both are parsed and
+    /// the method only returns null when neither yields anything usable.
     /// </summary>
     private static CivitaiImageGenerationData? ParseGenerationData(string body)
     {
@@ -153,44 +155,65 @@ public class CivitaiClient : IDisposable
         if (!TryGet(result, "data", out var data)) return null;
         if (!TryGet(data, "json", out var json)) return null;
 
-        // The generation parameters live under "meta"; some responses nest under "meta"/"meta".
-        if (!TryGet(json, "meta", out var meta) || meta.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
+        var gen = new CivitaiImageGenerationData();
 
-        var gen = new CivitaiImageGenerationData
+        // Generation parameters live under "meta" (often null for images uploaded without metadata).
+        if (TryGet(json, "meta", out var meta) && meta.ValueKind == JsonValueKind.Object)
         {
-            Prompt = ReadString(meta, "prompt"),
-            NegativePrompt = ReadString(meta, "negativePrompt"),
-            Sampler = ReadString(meta, "sampler"),
-            CfgScale = ReadString(meta, "cfgScale"),
-            Steps = ReadString(meta, "steps"),
-            Seed = ReadString(meta, "seed"),
-            Model = ReadString(meta, "Model") ?? ReadString(meta, "model"),
-            Size = ReadString(meta, "Size") ?? ReadString(meta, "size"),
-            ClipSkip = ReadString(meta, "clipSkip") ?? ReadString(meta, "Clip skip")
-        };
+            gen.Prompt = ReadString(meta, "prompt");
+            gen.NegativePrompt = ReadString(meta, "negativePrompt");
+            gen.Sampler = ReadString(meta, "sampler");
+            gen.CfgScale = ReadString(meta, "cfgScale");
+            gen.Steps = ReadString(meta, "steps");
+            gen.Seed = ReadString(meta, "seed");
+            gen.Model = ReadString(meta, "Model") ?? ReadString(meta, "model");
+            gen.Size = ReadString(meta, "Size") ?? ReadString(meta, "size");
+            gen.ClipSkip = ReadString(meta, "clipSkip") ?? ReadString(meta, "Clip skip");
 
-        // Capture any remaining simple scalar fields we didn't explicitly map.
-        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "prompt", "negativePrompt", "sampler", "cfgScale", "steps", "seed",
-            "Model", "model", "Size", "size", "clipSkip", "Clip skip"
-        };
-
-        foreach (var property in meta.EnumerateObject())
-        {
-            if (known.Contains(property.Name)) continue;
-
-            var value = ScalarToString(property.Value);
-            if (!string.IsNullOrWhiteSpace(value))
+            // Capture any remaining simple scalar fields we didn't explicitly map.
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                gen.Extras[property.Name] = value!;
+                "prompt", "negativePrompt", "sampler", "cfgScale", "steps", "seed",
+                "Model", "model", "Size", "size", "clipSkip", "Clip skip"
+            };
+
+            foreach (var property in meta.EnumerateObject())
+            {
+                if (known.Contains(property.Name)) continue;
+
+                var value = ScalarToString(property.Value);
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    gen.Extras[property.Name] = value!;
+                }
             }
         }
 
-        return gen;
+        // Resources (checkpoint, LoRAs, embeddings) — present even when meta is null.
+        if (TryGet(json, "resources", out var resources) && resources.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var res in resources.EnumerateArray())
+            {
+                if (res.ValueKind != JsonValueKind.Object) continue;
+
+                var resource = new CivitaiResource
+                {
+                    ModelName = ReadString(res, "modelName"),
+                    ModelType = ReadString(res, "modelType"),
+                    BaseModel = ReadString(res, "baseModel"),
+                    VersionName = ReadString(res, "versionName"),
+                    Strength = ReadString(res, "strength")
+                };
+
+                if (!string.IsNullOrWhiteSpace(resource.ModelName))
+                {
+                    gen.Resources.Add(resource);
+                }
+            }
+        }
+
+        // Nothing usable (no meta fields and no resources) — let the caller report "no data".
+        return gen.ToOrderedPairs().Count == 0 ? null : gen;
     }
 
     private static bool TryGet(JsonElement element, string name, out JsonElement value)
