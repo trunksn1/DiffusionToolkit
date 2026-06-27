@@ -527,6 +527,10 @@ public class Metadata
         fileParameters.Width = width;
         fileParameters.Height = height;
 
+        // Always expose the file's SHA-256 (computed above during the single read pass) so that
+        // consumers such as the user-metadata overlay can key on it, not just the no-metadata path.
+        fileParameters.Hash = hash;
+
         return fileParameters;
     }
 

@@ -167,6 +167,9 @@ public partial class DataStore
                 db.CreateTable<Query>();
                 db.CreateIndex<Query>(query => query.Name, true);
 
+                db.CreateTable<UserMetadata>();
+                db.CreateIndex<UserMetadata>(meta => meta.FileHash);
+
             }
             finally
             {

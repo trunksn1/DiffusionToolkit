@@ -54,6 +54,8 @@ public class ServiceLocator
     private static ScanningService? _scanningService;
     private static ContextMenuService? _contextMenuService;
     private static CivitaiPostService? _civitaiPostService;
+    private static CivitaiImageService? _civitaiImageService;
+    private static UserMetadataService? _userMetadataService;
 
     public static DataStore? DataStore => _dataStore;
     public static Settings? Settings => _settings;
@@ -149,6 +151,16 @@ public class ServiceLocator
     public static CivitaiPostService CivitaiPostService
     {
         get { return _civitaiPostService ??= new CivitaiPostService(); }
+    }
+
+    public static CivitaiImageService CivitaiImageService
+    {
+        get { return _civitaiImageService ??= new CivitaiImageService(); }
+    }
+
+    public static UserMetadataService UserMetadataService
+    {
+        get { return _userMetadataService ??= new UserMetadataService(); }
     }
 
     public static ExternalApplicationsService ExternalApplicationsService

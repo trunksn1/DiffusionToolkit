@@ -1,0 +1,54 @@
+<local:BorderlessWindow x:Class="Diffusion.Toolkit.Windows.UserMetadataEditWindow"
+                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                  xmlns:local="clr-namespace:Diffusion.Toolkit"
+                  xmlns:lex="http://wpflocalizeextension.codeplex.com"
+                  lex:LocalizeDictionary.Provider="{StaticResource LocalizationProvider}"
+                  lex:LocalizeDictionary.Separation="."
+                  lex:LocalizeDictionary.DefaultProvider="{StaticResource LocalizationProvider}"
+                  mc:Ignorable="d"
+                  WindowStartupLocation="CenterOwner"
+                  ShowInTaskbar="False"
+                  MenuWidth="0"
+                  TitleWidth="*"
+                  WindowStyle="ToolWindow"
+                  Style="{StaticResource BorderlessWindowStyle}"
+                  Title="{lex:Loc UserMetadata.Editor.Title}" Height="380" Width="460">
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="{Binding Escape}"></KeyBinding>
+    </Window.InputBindings>
+    <Grid Margin="15,20,15,15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{lex:Loc UserMetadata.Editor.Parameter}" Margin="0,0,0,3"
+                   Foreground="{DynamicResource ForegroundBrush}"/>
+        <ComboBox Grid.Row="1" x:Name="KeyComboBox" IsEditable="True" Margin="0,0,0,10"
+                  ItemsSource="{Binding SuggestedKeys}" Text="{Binding Key, UpdateSourceTrigger=PropertyChanged}"/>
+
+        <TextBlock Grid.Row="2" Text="{lex:Loc UserMetadata.Editor.Value}" Margin="0,0,0,3"
+                   Foreground="{DynamicResource ForegroundBrush}"/>
+        <TextBox Grid.Row="3" x:Name="ValueTextBox" AcceptsReturn="True" TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto" MinHeight="120"
+                 Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"/>
+
+        <Grid Grid.Row="4" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="1" MinWidth="90" Margin="0,0,8,0" Click="Ok_Click"
+                    Content="{lex:Loc UserMetadata.Editor.Ok}" IsDefault="True"/>
+            <Button Grid.Column="2" MinWidth="90" Click="Cancel_Click"
+                    Content="{lex:Loc UserMetadata.Editor.Cancel}" IsCancel="True"/>
+        </Grid>
+    </Grid>
+</local:BorderlessWindow>

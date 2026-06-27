@@ -14,6 +14,7 @@ public class MetadataSection : BaseNotify
     private AccordionState _modelState;
     private AccordionState _dateState;
     private AccordionState _workflowState;
+    private AccordionState _userMetadataState;
 
     public AccordionState PromptState
     {
@@ -71,7 +72,13 @@ public class MetadataSection : BaseNotify
 
     public AccordionState WorkflowState
     {
-        get => _workflowState; 
+        get => _workflowState;
         set => SetField(ref _workflowState, value);
+    }
+
+    public AccordionState UserMetadataState
+    {
+        get => _userMetadataState;
+        set => SetField(ref _userMetadataState, value);
     }
 }

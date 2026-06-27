@@ -18,6 +18,8 @@ public class MainModel : BaseNotify
     private ICommand _closeCommand;
     private ICommand _settingsCommand;
     private ICommand _rebuild;
+    private ICommand _exportUserMetadataCommand;
+    private ICommand _importUserMetadataCommand;
     private bool _showIcons;
     private bool _hideIcons;
     private ICommand _removeMarked;
@@ -164,6 +166,18 @@ public class MainModel : BaseNotify
     {
         get => _rebuild;
         set => SetField(ref _rebuild, value);
+    }
+
+    public ICommand ExportUserMetadataCommand
+    {
+        get => _exportUserMetadataCommand;
+        set => SetField(ref _exportUserMetadataCommand, value);
+    }
+
+    public ICommand ImportUserMetadataCommand
+    {
+        get => _importUserMetadataCommand;
+        set => SetField(ref _importUserMetadataCommand, value);
     }
 
     public ICommand ReloadHashes

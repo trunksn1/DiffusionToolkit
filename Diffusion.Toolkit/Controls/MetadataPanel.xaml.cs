@@ -66,6 +66,7 @@ namespace Diffusion.Toolkit.Controls
             PathMetadata.State = state;
             AlbumMetadata.State = state;
             DateMetadata.State = state;
+            UserMetadataAccordion.State = state;
         }
 
         private void AlbumName_OnMouseDown(object sender, MouseButtonEventArgs e)
