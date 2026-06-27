@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Diffusion.Common;
+using Diffusion.IO;
 using Diffusion.Civitai;
 using Diffusion.Civitai.Models;
 using Diffusion.Toolkit.Localization;
@@ -129,6 +130,67 @@ public class CivitaiImageService
     }
 
     /// <summary>
+    /// Non-interactive fetch used by the Tools &gt; Backfill batch. Derives the Civitai id from the
+    /// path, fetches generation data/resources and saves them into the overlay (keyed by the file's
+    /// SHA-256, Source = "civitai"). Idempotent: images that already have civitai overlay rows are
+    /// skipped. Reuses the supplied <paramref name="client"/> so the batch shares one HTTP connection.
+    /// </summary>
+    public async Task<CivitaiBackfillOutcome> BackfillImageAsync(CivitaiClient client, string? path, CancellationToken token)
+    {
+        if (!TryGetCivitaiImageId(path, out var imageId)) return CivitaiBackfillOutcome.NotCivitai;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return CivitaiBackfillOutcome.FileMissing;
+
+        string hash;
+        try
+        {
+            hash = HashFunctions.CalculateSHA256(path);
+        }
+        catch
+        {
+            return CivitaiBackfillOutcome.Failed;
+        }
+
+        // Idempotent: don't re-fetch images we've already pulled civitai data for.
+        var existing = ServiceLocator.DataStore.GetUserMetadata(hash);
+        if (existing.Any(r => string.Equals(r.Source, "civitai", StringComparison.OrdinalIgnoreCase)))
+        {
+            return CivitaiBackfillOutcome.AlreadyHadData;
+        }
+
+        var url = $"https://civitai.com/images/{imageId}";
+
+        CivitaiImageGenerationData? data;
+        string? error;
+        try
+        {
+            data = await client.FetchImageGenerationDataAsync(imageId, token);
+            error = client.LastError;
+        }
+        catch (Exception ex)
+        {
+            data = null;
+            error = ex.Message;
+        }
+
+        var pairs = data?.ToOrderedPairs();
+        if (pairs == null || pairs.Count == 0)
+        {
+            if (!string.IsNullOrEmpty(error))
+            {
+                Logger.Log($"CivitAI backfill for {url} returned no data: {error}");
+            }
+            return CivitaiBackfillOutcome.NoData;
+        }
+
+        foreach (var pair in pairs)
+        {
+            ServiceLocator.DataStore.UpsertUserMetadata(hash, pair.Key, pair.Value, "civitai", url);
+        }
+
+        return CivitaiBackfillOutcome.Saved;
+    }
+
+    /// <summary>
     /// Extracts the Civitai image id from a file path by reading the <c>CIV_ID__&lt;id&gt;</c> marker in
     /// the filename. Returns false when the path is empty or has no marker (i.e. not a Civitai image).
     /// </summary>
@@ -143,4 +205,15 @@ public class CivitaiImageService
 
         return match.Success && long.TryParse(match.Groups["id"].Value, out imageId);
     }
+}
+
+/// <summary>Result of a single image in the Tools &gt; Backfill CivitAI Metadata batch.</summary>
+public enum CivitaiBackfillOutcome
+{
+    Saved,
+    AlreadyHadData,
+    NoData,
+    NotCivitai,
+    FileMissing,
+    Failed
 }

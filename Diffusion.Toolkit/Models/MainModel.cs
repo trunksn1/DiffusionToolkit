@@ -131,6 +131,12 @@ public class MainModel : BaseNotify
         set => SetField(ref _importUserMetadataCommand, value);
     }
 
+    public ICommand BackfillCivitaiMetadataCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public ICommand ReloadHashes
     {
         get;

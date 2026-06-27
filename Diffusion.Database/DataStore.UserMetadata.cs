@@ -22,6 +22,22 @@ namespace Diffusion.Database
         }
 
         /// <summary>
+        /// Returns available images that were downloaded from CivitAI (filename contains the
+        /// <c>CIV_ID__</c> marker) and have an empty prompt — candidates for fetching generation
+        /// data from CivitAI into the overlay.
+        /// </summary>
+        public List<Image> GetCivitaiBackfillCandidates()
+        {
+            var db = OpenReadonlyConnection();
+
+            return db.Query<Image>(
+                $"SELECT Id, Path, Prompt FROM {nameof(Image)} " +
+                "WHERE (Prompt IS NULL OR TRIM(Prompt) = '') " +
+                "AND instr(Path, 'CIV_ID__') > 0 " +
+                "AND Unavailable = 0");
+        }
+
+        /// <summary>
         /// Inserts or updates a single overlay entry for (fileHash, key).
         /// </summary>
         public void UpsertUserMetadata(string fileHash, string key, string? value, string source, string? sourceUrl)
