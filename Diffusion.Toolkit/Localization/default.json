@@ -381,6 +381,7 @@
   "UserMetadata.Fetch.Title": "Fetch from CivitAI",
   "UserMetadata.Fetch.Prompt": "Paste the CivitAI image URL (e.g. https://civitai.com/images/12345678):",
   "UserMetadata.Fetch.InvalidUrl": "That doesn't look like a CivitAI image URL. Expected something like https://civitai.com/images/12345678",
+  "UserMetadata.Fetch.NotCivitai": "This image's filename has no CIV_ID__ marker, so its CivitAI image id can't be determined. Fetch is only available for images downloaded from CivitAI.",
   "UserMetadata.Fetch.NoData": "No generation data could be retrieved for that image. The image may be private, or CivitAI may have changed. You can add the metadata manually instead.",
   "UserMetadata.Fetch.ConfirmMessage": "The following metadata was found. Add it to this image?",
   "UserMetadata.Fetch.Success": "Added {count} field(s) from CivitAI",

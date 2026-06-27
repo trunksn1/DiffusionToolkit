@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -20,9 +21,10 @@ namespace Diffusion.Toolkit.Services;
 /// </summary>
 public class CivitaiImageService
 {
-    // Matches the numeric id in https://civitai.com/images/12345678(?...)
-    private static readonly Regex ImageIdRegex =
-        new(@"civitai\.com/images/(?<id>\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // Matches the Civitai image id embedded in download filenames, e.g.
+    // 2026-06-23_05-10-56_8435__CIV_ID__134578059.png  ->  134578059
+    private static readonly Regex FilenameIdRegex =
+        new(@"CIV_ID__(?<id>\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private string GetLocalizedText(string key)
     {
@@ -30,37 +32,25 @@ public class CivitaiImageService
     }
 
     /// <summary>
-    /// Prompts for the image's Civitai URL, fetches its generation data, asks the user to confirm,
-    /// saves the fields into the overlay, then refreshes the supplied collection.
+    /// Derives the image's Civitai id from its filename (the <c>CIV_ID__&lt;id&gt;</c> marker added by the
+    /// collections scraper), fetches its generation data, asks the user to confirm, saves the fields into
+    /// the overlay, then refreshes the supplied collection. Images without the marker are not from Civitai
+    /// and are rejected.
     /// </summary>
     public async Task FetchForImageAsync(ImageViewModel image, ObservableCollection<UserMetadataItemViewModel> target)
     {
         if (image == null) return;
 
-        var (inputResult, url) = await ServiceLocator.MessageService.ShowInput(
-            GetLocalizedText("UserMetadata.Fetch.Prompt"),
-            GetLocalizedText("UserMetadata.Fetch.Title"),
-            "https://civitai.com/images/");
-
-        if (inputResult != PopupResult.OK || string.IsNullOrWhiteSpace(url))
-        {
-            return;
-        }
-
-        var match = ImageIdRegex.Match(url);
-        if (!match.Success)
+        if (!TryGetCivitaiImageId(image.Path, out var imageId))
         {
             await ServiceLocator.MessageService.Show(
-                GetLocalizedText("UserMetadata.Fetch.InvalidUrl"),
+                GetLocalizedText("UserMetadata.Fetch.NotCivitai"),
                 GetLocalizedText("UserMetadata.Fetch.Title"),
                 PopupButtons.OK);
             return;
         }
 
-        if (!long.TryParse(match.Groups["id"].Value, out var imageId))
-        {
-            return;
-        }
+        var url = $"https://civitai.com/images/{imageId}";
 
         CivitaiImageGenerationData? data;
         try
@@ -126,5 +116,21 @@ public class CivitaiImageService
         ServiceLocator.ToastService.Toast(
             GetLocalizedText("UserMetadata.Fetch.Success").Replace("{count}", $"{pairs.Count}"),
             GetLocalizedText("UserMetadata.Fetch.Title"));
+    }
+
+    /// <summary>
+    /// Extracts the Civitai image id from a file path by reading the <c>CIV_ID__&lt;id&gt;</c> marker in
+    /// the filename. Returns false when the path is empty or has no marker (i.e. not a Civitai image).
+    /// </summary>
+    private static bool TryGetCivitaiImageId(string? path, out long imageId)
+    {
+        imageId = 0;
+
+        if (string.IsNullOrWhiteSpace(path)) return false;
+
+        var fileName = Path.GetFileNameWithoutExtension(path);
+        var match = FilenameIdRegex.Match(fileName);
+
+        return match.Success && long.TryParse(match.Groups["id"].Value, out imageId);
     }
 }
