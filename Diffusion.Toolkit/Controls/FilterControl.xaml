@@ -350,6 +350,26 @@
                                 <RadioButton Click="ButtonBase_OnClick" GroupName="HasTag" IsChecked="{Binding HasTag, Converter={StaticResource isValueBool}, ConverterParameter=false}" Content="{lex:Loc Filter.Metadata.False}"></RadioButton>
                             </StackPanel>
                         </Grid>
+                        <!-- User Metadata overlay filters -->
+                        <Label FontWeight="Bold" Margin="0,10,0,5">User Metadata</Label>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseUserMetaKey}" VerticalContentAlignment="Center" Content="Meta Title"></CheckBox>
+                            <TextBox VerticalContentAlignment="Center" Text="{Binding UserMetaKey}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
+                                     ToolTip="Images with a User Metadata entry whose title/key contains this text (e.g. Checkpoint). * = wildcard"></TextBox>
+                        </Grid>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{Binding UseUserMetaValue}" VerticalContentAlignment="Center" Content="Meta Content"></CheckBox>
+                            <TextBox VerticalContentAlignment="Center" Text="{Binding UserMetaValue}" KeyDown="UIElement_OnKeyDown" Grid.Column="1" Height="20"
+                                     ToolTip="Images with a User Metadata entry whose content/value contains this text (e.g. ChatGPT). * = wildcard"></TextBox>
+                        </Grid>
                         <!-- CivitAI Extension Filters -->
                         <Label FontWeight="Bold" Margin="0,10,0,5">CivitAI Extension</Label>
                         <Grid Margin="0,0,0,5">

@@ -60,6 +60,7 @@ namespace Diffusion.Database
             FilterTag(filter, conditions);
             FilterTagEx(filter, conditions);
             FilterHasTag(filter, conditions);
+            FilterUserMetadata(filter, conditions);
 
             //FilterNegativePrompt(filter, conditions);
             //FilterPrompt(filter, conditions);
@@ -228,6 +229,25 @@ namespace Diffusion.Database
                 {
                     conditions.Add(new KeyValuePair<string, object>("(SELECT COUNT(1) FROM ImageTag WHERE ImageId = m1.Id) = 0", null));
                 }
+            }
+        }
+
+        private static void FilterUserMetadata(Filter filter, List<KeyValuePair<string, object>> conditions)
+        {
+            // Match the user-metadata overlay (linked to the image by file hash) by title (Key)
+            // and/or content (Value). Both use "contains" semantics; * acts as a wildcard.
+            if (filter.UseUserMetaKey && !string.IsNullOrWhiteSpace(filter.UserMetaKey))
+            {
+                var value = $"%{filter.UserMetaKey.Trim()}%".Replace("*", "%");
+                conditions.Add(new KeyValuePair<string, object>(
+                    "EXISTS (SELECT 1 FROM UserMetadata um WHERE um.FileHash = m1.Hash AND um.Key LIKE ?)", value));
+            }
+
+            if (filter.UseUserMetaValue && !string.IsNullOrWhiteSpace(filter.UserMetaValue))
+            {
+                var value = $"%{filter.UserMetaValue.Trim()}%".Replace("*", "%");
+                conditions.Add(new KeyValuePair<string, object>(
+                    "EXISTS (SELECT 1 FROM UserMetadata um WHERE um.FileHash = m1.Hash AND um.Value LIKE ?)", value));
             }
         }
 

@@ -70,6 +70,12 @@ public class Filter
     public bool UseHasTag { get; set; }
     public bool HasTag { get; set; }
 
+    // User-metadata overlay: match by the entry's title (Key) and/or its content (Value).
+    public bool UseUserMetaKey { get; set; }
+    public string UserMetaKey { get; set; }
+    public bool UseUserMetaValue { get; set; }
+    public string UserMetaValue { get; set; }
+
     public bool UseCivitaiLink { get; set; }
     public bool CivitaiLink { get; set; }
 
@@ -128,6 +134,8 @@ public class Filter
                             UseTag ||
                             UseTagEx ||
                             UseHasTag ||
+                            UseUserMetaKey ||
+                            UseUserMetaValue ||
                             UseCivitaiLink ||
                             UseCivitaiLoraRiforgiati ||
                             UseCivitaiLoraInForge ||

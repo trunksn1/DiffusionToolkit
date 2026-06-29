@@ -536,6 +536,30 @@ public class FilterControlModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public bool UseUserMetaKey
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string UserMetaKey
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public bool UseUserMetaValue
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
+    public string UserMetaValue
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public bool UseCivitaiLink
     {
         get;
@@ -645,6 +669,8 @@ public class FilterControlModel : BaseNotify
                              UseTag ||
                              UseTagEx ||
                              UseHasTag ||
+                             UseUserMetaKey ||
+                             UseUserMetaValue ||
                              UseCivitaiLink ||
                              UseCivitaiLoraRiforgiati ||
                              UseCivitaiLoraInForge ||
@@ -737,6 +763,10 @@ public class FilterControlModel : BaseNotify
         UseTagEx = false;
         HasTag = false;
         UseHasTag = false;
+        UserMetaKey = String.Empty;
+        UseUserMetaKey = false;
+        UserMetaValue = String.Empty;
+        UseUserMetaValue = false;
         CivitaiLink = false;
         UseCivitaiLink = false;
         CivitaiLoraRiforgiati = String.Empty;

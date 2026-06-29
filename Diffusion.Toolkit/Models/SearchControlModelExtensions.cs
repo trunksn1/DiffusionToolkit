@@ -95,6 +95,11 @@ public static class SearchControlModelExtensions
         model.UseHasTag = filter.UseHasTag;
         model.HasTag = filter.HasTag;
 
+        model.UseUserMetaKey = filter.UseUserMetaKey;
+        model.UserMetaKey = filter.UserMetaKey;
+        model.UseUserMetaValue = filter.UseUserMetaValue;
+        model.UserMetaValue = filter.UserMetaValue;
+
         model.UseCivitaiLink = filter.UseCivitaiLink;
         model.CivitaiLink = filter.CivitaiLink;
         model.UseCivitaiLoraRiforgiati = filter.UseCivitaiLoraRiforgiati;
@@ -208,6 +213,11 @@ public static class SearchControlModelExtensions
         filter.TagEx = model.TagEx;
         filter.UseHasTag = model.UseHasTag;
         filter.HasTag = model.HasTag;
+
+        filter.UseUserMetaKey = model.UseUserMetaKey;
+        filter.UserMetaKey = model.UserMetaKey;
+        filter.UseUserMetaValue = model.UseUserMetaValue;
+        filter.UserMetaValue = model.UserMetaValue;
 
         filter.UseCivitaiLink = model.UseCivitaiLink;
         filter.CivitaiLink = model.CivitaiLink;
