@@ -86,6 +86,7 @@ namespace Diffusion.Toolkit
             _model.ExportUserMetadataCommand = new RelayCommand<object>((o) => ExportUserMetadata());
             _model.ImportUserMetadataCommand = new RelayCommand<object>((o) => ImportUserMetadata());
             _model.BackfillCivitaiMetadataCommand = new AsyncCommand<object>(BackfillCivitaiMetadataTask);
+            _model.IndexUserMetadataCommand = new AsyncCommand<object>(IndexUserMetadataTask);
             _model.FixFoldersCommand = new RelayCommand<object>((o) => FixFolders());
             _model.RemoveExcludedImagesCommand = new RelayCommand<object>((o) => CleanExcludedPaths());
             _model.CleanRemovedFoldersCommand = new AsyncCommand<object>(CleanRemovedFolders);

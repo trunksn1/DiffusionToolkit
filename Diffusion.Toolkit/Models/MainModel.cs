@@ -137,6 +137,12 @@ public class MainModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    public ICommand IndexUserMetadataCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public ICommand ReloadHashes
     {
         get;

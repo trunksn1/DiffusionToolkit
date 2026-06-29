@@ -1,9 +1,127 @@
+using System.Text.RegularExpressions;
 using Diffusion.Database.Models;
 
 namespace Diffusion.Database
 {
     public partial class DataStore
     {
+        private static readonly Regex CivIdInPathRegex = new Regex("CIV_ID__(?<id>\\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex CivIdInUrlRegex = new Regex("/images/(?<id>\\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Persists the SHA-256 hash onto the scanner-owned Image row so the user-metadata overlay
+        /// (keyed by file hash) can be reached from SQL search. Safe: the value is the real file hash.
+        /// </summary>
+        public void SetImageHash(int imageId, string hash)
+        {
+            if (imageId <= 0 || string.IsNullOrEmpty(hash)) return;
+
+            using var db = OpenConnection();
+
+            var command = db.CreateCommand($"UPDATE {nameof(Image)} SET Hash = ? WHERE Id = ?", hash, imageId);
+
+            lock (_lock)
+            {
+                command.ExecuteNonQuery();
+            }
+
+            db.Close();
+        }
+
+        /// <summary>
+        /// Fills <see cref="Image.Hash"/> for the row at the given path when it is currently empty, so
+        /// the overlay (keyed by file hash) is reachable from SQL search. No-op if a hash already exists.
+        /// </summary>
+        public void SetImageHashByPath(string path, string hash)
+        {
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(hash)) return;
+
+            using var db = OpenConnection();
+
+            var command = db.CreateCommand(
+                $"UPDATE {nameof(Image)} SET Hash = ? WHERE Path = ? AND (Hash IS NULL OR Hash = '')", hash, path);
+
+            lock (_lock)
+            {
+                command.ExecuteNonQuery();
+            }
+
+            db.Close();
+        }
+
+        /// <summary>
+        /// Links existing CivitAI-sourced overlay entries to their images by writing the overlay's
+        /// file hash into <see cref="Image.Hash"/>, matching the image's <c>CIV_ID__{id}</c> filename
+        /// marker against the overlay's SourceUrl (<c>/images/{id}</c>). Pure database work — no file
+        /// hashing. Only fills images that currently have no hash. Returns the number of images linked.
+        /// </summary>
+        public int IndexUserMetadataForSearch()
+        {
+            // civId -> overlay file hash (from CivitAI-sourced rows that carry a SourceUrl)
+            var byCivId = new Dictionary<string, string>();
+
+            {
+                var db = OpenReadonlyConnection();
+
+                var overlayRows = db.Query<UserMetadata>(
+                    $"SELECT DISTINCT FileHash, SourceUrl FROM {nameof(UserMetadata)} " +
+                    "WHERE SourceUrl IS NOT NULL AND SourceUrl <> '' AND FileHash IS NOT NULL AND FileHash <> ''");
+
+                foreach (var row in overlayRows)
+                {
+                    var m = CivIdInUrlRegex.Match(row.SourceUrl ?? string.Empty);
+                    if (m.Success)
+                    {
+                        byCivId[m.Groups["id"].Value] = row.FileHash;
+                    }
+                }
+            }
+
+            if (byCivId.Count == 0) return 0;
+
+            // Images that still have no hash but carry the CIV_ID marker
+            var updates = new List<(int Id, string Hash)>();
+
+            {
+                var db = OpenReadonlyConnection();
+
+                var images = db.Query<Image>(
+                    $"SELECT Id, Path FROM {nameof(Image)} " +
+                    "WHERE (Hash IS NULL OR Hash = '') AND instr(Path, 'CIV_ID__') > 0");
+
+                foreach (var image in images)
+                {
+                    var m = CivIdInPathRegex.Match(image.Path ?? string.Empty);
+                    if (m.Success && byCivId.TryGetValue(m.Groups["id"].Value, out var hash))
+                    {
+                        updates.Add((image.Id, hash));
+                    }
+                }
+            }
+
+            if (updates.Count == 0) return 0;
+
+            using (var db = OpenConnection())
+            {
+                lock (_lock)
+                {
+                    db.BeginTransaction();
+
+                    foreach (var (id, hash) in updates)
+                    {
+                        var command = db.CreateCommand($"UPDATE {nameof(Image)} SET Hash = ? WHERE Id = ?", hash, id);
+                        command.ExecuteNonQuery();
+                    }
+
+                    db.Commit();
+                }
+
+                db.Close();
+            }
+
+            return updates.Count;
+        }
+
         /// <summary>
         /// Returns all user-supplied overlay metadata for a given file hash, ordered by key.
         /// </summary>

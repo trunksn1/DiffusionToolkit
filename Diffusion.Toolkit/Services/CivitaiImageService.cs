@@ -187,6 +187,9 @@ public class CivitaiImageService
             ServiceLocator.DataStore.UpsertUserMetadata(hash, pair.Key, pair.Value, "civitai", url);
         }
 
+        // Mirror the file hash onto the Image row so this overlay is reachable from SQL search (usermeta:).
+        ServiceLocator.DataStore.SetImageHashByPath(path, hash);
+
         return CivitaiBackfillOutcome.Saved;
     }
 

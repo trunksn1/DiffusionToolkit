@@ -58,6 +58,7 @@
   "Menu.Tools.ReloadModels": "Reload _models",
   "Menu.Tools.DownloadCivitaiModels": "Download _Civitai models",
   "Menu.Tools.BackfillCivitaiMetadata": "Backfill CivitAI Metadata…",
+  "Menu.Tools.IndexUserMetadata": "Index User Metadata for Search…",
   "Menu.Tools.Folders": "_Folders",
   "Menu.Tools.Folders.FixMissingImages": "_Fix missing images",
   "Menu.Tools.Folders.RemoveExcludedImages": "_Remove excluded images",

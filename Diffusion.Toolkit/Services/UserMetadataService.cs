@@ -87,6 +87,13 @@ public class UserMetadataService
         if (string.IsNullOrEmpty(hash)) return false;
 
         ServiceLocator.DataStore.UpsertUserMetadata(hash, key.Trim(), value, source, sourceUrl);
+
+        // Mirror the hash onto the Image row so the overlay is reachable from SQL search (usermeta:).
+        if (image.Id > 0)
+        {
+            ServiceLocator.DataStore.SetImageHash(image.Id, hash);
+        }
+
         return true;
     }
 

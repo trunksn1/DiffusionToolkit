@@ -45,6 +45,9 @@ public static partial class QueryBuilder
     private static readonly Regex NSFWRegex = new Regex("\\b(?:nsfw):\\s*(?<value>(?:true|false))?\\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex NoMetadataRegex = new Regex("\\b(?:nometa|nometadata):\\s*(?<value>(?:true|false))?\\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Matches the user-metadata overlay (Key or Value). Quoted form allows spaces: usermeta:"some text"
+    private static readonly Regex UserMetaRegex = new Regex("\\b(?:usermeta|umeta):\\s*(?:\"(?<value>[^\"]+)\"|(?<value>\\S+))", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex NegativePromptRegex = new Regex("\\b(?:negative prompt|negative_prompt|negative):\\s*(?<value>.*)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static List<string> Samplers { get; set; }
@@ -118,6 +121,7 @@ public static partial class QueryBuilder
             ParseNSFW(ref prompt, conditions);
             ParseInAlbum(ref prompt, conditions);
             ParseNoMetadata(ref prompt, conditions);
+            ParseUserMetadata(ref prompt, conditions);
 
             //ParseNegativePrompt(ref prompt, conditions);
             //ParsePrompt(ref prompt, conditions);
@@ -348,6 +352,23 @@ public static partial class QueryBuilder
             }
 
             conditions.Add(new KeyValuePair<string, object>("(NoMetadata = ?)", value));
+        }
+    }
+
+    private static void ParseUserMetadata(ref string prompt, List<KeyValuePair<string, object>> conditions)
+    {
+        var match = UserMetaRegex.Match(prompt);
+        if (match.Success)
+        {
+            prompt = UserMetaRegex.Replace(prompt, String.Empty);
+
+            var value = match.Groups["value"].Value;
+            var like = $"%{value}%";
+
+            // Match images whose overlay (linked by file hash) has a Key or Value containing the term.
+            conditions.Add(new KeyValuePair<string, object>(
+                "(EXISTS (SELECT 1 FROM UserMetadata um WHERE um.FileHash = m1.Hash AND (um.Value LIKE ? OR um.Key LIKE ?)))",
+                new object[] { like, like }));
         }
     }
 

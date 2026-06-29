@@ -84,6 +84,50 @@ namespace Diffusion.Toolkit
                 "Backfill CivitAI Metadata");
         }
 
+        /// <summary>
+        /// Tools &gt; Index User Metadata for Search. Links existing CivitAI-sourced overlay entries to
+        /// their images (by writing the file hash onto the Image row, matched via the CIV_ID__ marker)
+        /// so they become reachable from the <c>usermeta:</c> search token. Pure database work — fast,
+        /// no file hashing, and safe to run repeatedly.
+        /// </summary>
+        private async Task IndexUserMetadataTask(object o)
+        {
+            var confirm = await _messagePopupManager.ShowMedium(
+                "Make your existing User Metadata searchable.\n\nThis links overlay entries (fetched from CivitAI) to their images so you can find them with the \"usermeta:\" search term. It only updates the database (no files are read) and is safe to run again at any time.\n\nContinue?",
+                "Index User Metadata for Search",
+                PopupButtons.YesNo);
+
+            if (confirm != PopupResult.Yes)
+                return;
+
+            if (!await ServiceLocator.ProgressService.TryStartTask())
+                return;
+
+            int linked = 0;
+
+            try
+            {
+                ServiceLocator.ProgressService.SetStatus("Indexing User Metadata for search…");
+
+                await Task.Run(() =>
+                {
+                    linked = _dataStore.IndexUserMetadataForSearch();
+                });
+            }
+            finally
+            {
+                ServiceLocator.ProgressService.ClearStatus();
+                ServiceLocator.ProgressService.ClearProgress();
+                ServiceLocator.ProgressService.CompleteTask();
+            }
+
+            ServiceLocator.ToastService.Toast(
+                linked > 0
+                    ? $"Linked {linked:#,###} image(s). You can now search with usermeta:…"
+                    : "Everything was already indexed. Search with usermeta:…",
+                "Index User Metadata for Search");
+        }
+
         private async void ExportUserMetadata()
         {
             using var dialog = new CommonSaveFileDialog
