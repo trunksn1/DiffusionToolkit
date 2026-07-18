@@ -12,7 +12,14 @@
       "Bash(dir:*)",
       "Bash(ls:*)",
       "Bash(.venvScriptspython.exe:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(git ls-tree *)",
+      "Bash(GIT_EDITOR=true git cherry-pick --continue)",
+      "PowerShell(dotnet build *)",
+      "Bash(awk 'END{print NR\" total lines\"}' Diffusion.Toolkit/Models/ImageViewModel.cs)",
+      "Bash(GIT_EDITOR=true git commit --amend --no-edit)",
+      "Bash(git commit -q -m ' *)",
+      "PowerShell(git *)"
     ]
   }
 }
