@@ -29,6 +29,10 @@ INCREMENTAL_OVERLAP_DAYS = 7
 # real account, but finite if the endpoint misbehaves (bad cursor, ignored
 # filters). Without this a bad response shape means an infinite loop.
 MAX_PAGES_PER_SECTION = 400
+# Queue flags are only trustworthy near the present: the anonymous feed hides
+# some old NSFW posts, so deep-history diffs produce false "queued" flags.
+# Only posts newer than this window (or future-dated) may be flagged.
+QUEUE_FLAG_WINDOW_DAYS = 30
 # Queued-post detection, verified live 2026-07-19:
 # - post.getInfinite section="draft" is BROKEN server-side: it returns the real
 #   pending posts first, then keeps paginating into the user's entire published
@@ -38,6 +42,15 @@ MAX_PAGES_PER_SECTION = 400
 # - The only reliable ground truth: what an ANONYMOUS request can see of the
 #   user's feed is published; anything the authenticated fetch returns beyond
 #   that is the pending queue. queued = authenticated ids - anonymous ids.
+#
+# FUTURE-scheduled posts (publishedAt > now), verified live 2026-07-19:
+# - Every feed clamps publishedAt <= now under Bearer auth: baseline, pending,
+#   section=draft/scheduled, draftOnly, synthetic future cursors, and the SSR
+#   page all return NO future posts (per-item post.get/image.get DO return
+#   them, so the data exists).
+# - Only a real browser COOKIE session receives future posts from the draft
+#   section (that is how the website renders the user's schedule), so the
+#   future pass below bypasses Bearer entirely and requires fresh cookies.
 
 
 def default_cache_path() -> Path:
@@ -310,6 +323,87 @@ def _fetch_public_ids(client, username: str,
         return None
 
 
+def _fetch_future_posts(client, username: str, warnings: List[str],
+                        progress=None) -> List[Dict[str, Any]]:
+    """Posts scheduled for the FUTURE, via the cookie session only.
+
+    Bearer-authenticated feeds clamp publishedAt <= now (verified live);
+    only a real browser cookie session receives future posts from the draft
+    section. sort=Newest puts future posts first, so paging stops at the
+    first page that contains no future-dated post.
+    """
+    _emit(progress, "Checking future-scheduled posts…")
+    client._ensure_cookies()
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    future: List[Dict[str, Any]] = []
+    cursor = None
+    pages = 0
+    while True:
+        input_json: Dict[str, Any] = {"username": username, "period": "AllTime",
+                                      "sort": "Newest", "limit": 50,
+                                      "section": "draft", "authed": True}
+        if cursor is not None:
+            input_json["cursor"] = cursor
+        params = {"input": json.dumps({"json": input_json}, separators=(",", ":"))}
+        try:
+            # Plain session.get: cookies, no Bearer header.
+            resp = client.session.get(f"{client.trpc_url}/post.getInfinite",
+                                      params=params, timeout=30)
+        except Exception as e:
+            warnings.append(f"future-posts fetch failed: {e}")
+            return future
+        if resp.status_code != 200:
+            warnings.append(f"future-posts fetch HTTP {resp.status_code} - "
+                            "refresh your cookies file to see scheduled posts")
+            return future
+
+        try:
+            data = resp.json().get("result", {}).get("data", {}).get("json") or {}
+        except Exception:
+            data = {}
+        items = data.get("items", []) if isinstance(data, dict) else []
+        next_cursor = data.get("nextCursor") if isinstance(data, dict) else None
+        if not items:
+            break
+
+        page_future = 0
+        for post in items:
+            if not isinstance(post, dict) or post.get("id") is None:
+                continue
+            owner = (post.get("user") or {}).get("username")
+            if owner and owner.lower() != username.lower():
+                continue
+            dt = _parse_iso(post.get("publishedAt"))
+            if dt and dt > now_utc:
+                future.append(post)
+                page_future += 1
+
+        pages += 1
+        _emit(progress, f"Checking future-scheduled posts: page {pages} "
+                        f"({len(future)} found)…")
+        # Future posts sort first; a page without any means we are past them.
+        if page_future == 0 or not next_cursor or next_cursor == cursor:
+            break
+        if pages >= MAX_PAGES_PER_SECTION:
+            warnings.append("future-posts: hit the page safety cap")
+            break
+        cursor = next_cursor
+        time.sleep(PAGE_DELAY_SECONDS)
+
+    if not future:
+        # Either the user has no scheduled posts, or the cookie session is
+        # stale (expired cookies degrade to the clamped listing silently).
+        warnings.append(
+            "No future-scheduled posts found. If you DO have scheduled posts "
+            "on civitai, refresh your cookies: log into civitai.com in Chrome, "
+            "export with 'Get cookies.txt LOCALLY', and save the file in the "
+            "Civitai Collections Scraper folder.")
+    else:
+        logger.info(f"Future-scheduled posts: {len(future)}")
+    return future
+
+
 def fetch_posts(client, config: dict, username: Optional[str],
                 range_from: datetime.date, range_to: datetime.date,
                 existing_cache: Optional[dict], progress=None) -> dict:
@@ -361,14 +455,22 @@ def fetch_posts(client, config: dict, username: Optional[str],
     # a page covers weeks), so queue flags can be re-evaluated even for posts
     # the incremental authed pass kept from cache. On failure, flag nothing.
     public_ids = _fetch_public_ids(client, username, range_start, warnings, progress)
+    flag_floor = now_utc - datetime.timedelta(days=QUEUE_FLAG_WINDOW_DAYS)
     queued_ids: set = set()
     if public_ids is not None:
         for pid, post in fetched.items():
             dt = _parse_iso(post.get("publishedAt"))
-            if dt and dt >= range_start and pid not in public_ids:
+            if dt and dt >= range_start and dt >= flag_floor and pid not in public_ids:
                 queued_ids.add(pid)
     if queued_ids:
         logger.info(f"Pending queue: {len(queued_ids)} post(s) not publicly visible")
+
+    # Future-scheduled posts come from the cookie-session pass; they are queued
+    # by definition and bypass the range filter via queued_ids membership.
+    for post in _fetch_future_posts(client, username, warnings, progress):
+        pid = post.get("id")
+        fetched[pid] = post
+        queued_ids.add(pid)
 
     range_end = datetime.datetime.combine(range_to, datetime.time.max,
                                           tzinfo=datetime.timezone.utc)
@@ -407,11 +509,16 @@ def fetch_posts(client, config: dict, username: Optional[str],
     # refresh, and vice versa); older kept posts keep whatever flag they had.
     new_ids = {p.get("postId") for p in new_posts}
     kept_posts = [p for p in kept_posts if p.get("postId") not in new_ids]
-    if public_ids is not None:
-        for p in kept_posts:
-            dt = _parse_iso(p.get("publishedAt"))
-            if dt and range_start <= dt < stop_before:
-                p["scheduled"] = p.get("postId") not in public_ids
+    for p in kept_posts:
+        dt = _parse_iso(p.get("publishedAt"))
+        if dt is None:
+            continue
+        if public_ids is not None and range_start <= dt < stop_before:
+            p["scheduled"] = dt >= flag_floor and p.get("postId") not in public_ids
+        elif p.get("scheduled") and dt < flag_floor:
+            # Self-heal: flags outside the trustworthy window are noise from
+            # older runs (the anonymous feed hides some old NSFW posts).
+            p["scheduled"] = False
 
     all_posts = kept_posts + new_posts
     all_posts.sort(key=lambda p: p.get("publishedAt") or "", reverse=True)
