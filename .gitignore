@@ -34,3 +34,10 @@ packages
 build
 build-self-contained
 .vscode
+
+# Local-only files - never commit
+*_cookies*.txt
+*.lnk
+/legacy/
+/diff.csv
+/new_diff.csv
