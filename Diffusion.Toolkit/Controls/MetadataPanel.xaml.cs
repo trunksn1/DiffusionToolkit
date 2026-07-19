@@ -75,19 +75,33 @@ namespace Diffusion.Toolkit.Controls
         }
 
         /// <summary>
-        /// The files the Schedule tab acts on: the thumbnail multi-selection when
-        /// there is one, otherwise the image currently shown in the preview.
+        /// The images the Schedule tab acts on: the thumbnail multi-selection
+        /// when there is one, otherwise the image currently shown in the
+        /// preview. Ids are kept alongside paths for Posted-album tagging.
         /// </summary>
-        private List<string> GetScheduleTargets()
+        private List<(string Path, int Id)> GetScheduleTargets()
         {
+            IEnumerable<(string Path, int Id)> entries;
             var selected = ServiceLocator.MainModel?.SelectedImages;
-            var paths = selected is { Count: > 0 }
-                ? selected.Where(entry => entry.EntryType == EntryType.File).Select(entry => entry.Path)
-                : CurrentImage?.Path is { } current ? new[] { current } : Enumerable.Empty<string>();
+            if (selected is { Count: > 0 })
+            {
+                entries = selected
+                    .Where(entry => entry.EntryType == EntryType.File)
+                    .Select(entry => (entry.Path, entry.Id));
+            }
+            else if (CurrentImage?.Path is { } current)
+            {
+                entries = new[] { (current, CurrentImage.Id) };
+            }
+            else
+            {
+                entries = Enumerable.Empty<(string, int)>();
+            }
 
-            return paths
-                .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            return entries
+                .Where(t => !string.IsNullOrWhiteSpace(t.Path) && File.Exists(t.Path))
+                .GroupBy(t => t.Path, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
                 .ToList();
         }
 
@@ -100,7 +114,7 @@ namespace Diffusion.Toolkit.Controls
                 1 => "1 image will be posted",
                 _ => $"{files.Count} images will be posted together"
             };
-            ScheduleFilesList.ItemsSource = files.Select(Path.GetFileName).ToList();
+            ScheduleFilesList.ItemsSource = files.Select(f => Path.GetFileName(f.Path)).ToList();
             ScheduleButton.IsEnabled = files.Count > 0;
         }
 
@@ -140,7 +154,8 @@ namespace Diffusion.Toolkit.Controls
                 void OnProgress(string message) =>
                     Dispatcher.BeginInvoke(() => ScheduleStatusText.Text = message);
 
-                var result = await ServiceLocator.CivitaiPostsService.SchedulePostAsync(files, publishAt, title, OnProgress);
+                var result = await ServiceLocator.CivitaiPostsService.SchedulePostAsync(
+                    files.Select(f => f.Path).ToList(), publishAt, title, OnProgress);
                 if (result.IsAuthFailure)
                 {
                     ScheduleStatusText.Text = "Authentication failed.";
@@ -154,7 +169,13 @@ namespace Diffusion.Toolkit.Controls
                     return;
                 }
 
-                ScheduleStatusText.Text = $"Scheduled for {publishAt:g}. It will appear in the CivitAI Calendar after the next Fetch Upcoming.";
+                // Tag the scheduled images in the Posted album right away —
+                // no need to wait for the calendar's matcher to find them.
+                var tagged = ServiceLocator.CivitaiPostsService.MarkImagesAsPosted(
+                    files.Select(f => f.Id).Where(id => id > 0));
+
+                ScheduleStatusText.Text = $"Scheduled for {publishAt:g} — it's now in the CivitAI Calendar"
+                    + (tagged > 0 ? $" and {tagged} image(s) were added to the '{CivitaiPostsService.PostedAlbumName}' album." : ".");
                 ServiceLocator.ToastService?.Toast(
                     $"Scheduled post with {files.Count} image(s) for {publishAt:g}", "CivitAI");
             }

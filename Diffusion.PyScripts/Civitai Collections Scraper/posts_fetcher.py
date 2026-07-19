@@ -431,13 +431,19 @@ def fetch_posts(client, config: dict, username: Optional[str],
             stop_before = max(boundary, range_start)
 
     # Everything older than the scan window is kept as-is from the cache.
+    # Future-dated posts are also kept: posts scheduled through Diffusion
+    # Toolkit are recorded locally at schedule time, and the scheduled feed
+    # can lag or hide them - a fetch that misses one must not wipe it. When
+    # a fetch does return the post, the fresh entry replaces the kept one.
     kept_posts: List[Dict[str, Any]] = []
     if existing_cache and isinstance(existing_cache.get("posts"), list):
+        def _keep(p):
+            dt = _parse_iso(p.get("publishedAt"))
+            return dt is not None and (dt < stop_before or dt > now_utc)
         kept_posts = [p for p in existing_cache["posts"]
-                      if isinstance(p, dict)
-                      and (_parse_iso(p.get("publishedAt")) or now_utc) < stop_before]
+                      if isinstance(p, dict) and _keep(p)]
         logger.info(f"Incremental fetch: keeping {len(kept_posts)} cached posts "
-                    f"older than {stop_before.date()}")
+                    f"(older than {stop_before.date()} or future-scheduled)")
 
     # Single authenticated pass: the baseline feed includes both published
     # posts and the owner's pending queue.
@@ -548,6 +554,44 @@ def write_cache_atomic(cache: dict, path: Path):
     os.replace(tmp, path)
 
 
+def record_scheduled_post(client, cache_path: Path, post_id, published_at: str,
+                          title: Optional[str], images: List[Dict[str, Any]]) -> bool:
+    """Insert a just-scheduled post straight into the calendar cache.
+
+    The calendar shows it immediately, with no dependency on the scheduled
+    feed returning it (feeds have lagged/hidden fresh posts before). A later
+    fetch that does see the post replaces this entry with server data.
+    """
+    cache = load_cache(cache_path)
+    if cache is None or not cache.get("username"):
+        try:
+            username = _resolve_username(client, None)
+        except Exception as e:
+            logger.warning(f"record_scheduled_post: no cache and no username ({e}); skipping")
+            return False
+        today = datetime.date.today()
+        cache = {"version": CACHE_VERSION, "username": username,
+                 "rangeFrom": today.isoformat(),
+                 "rangeTo": (today + datetime.timedelta(days=92)).isoformat(),
+                 "posts": [], "warnings": []}
+
+    posts = [p for p in cache.get("posts", [])
+             if isinstance(p, dict) and p.get("postId") != post_id]
+    posts.append({
+        "postId": post_id,
+        "publishedAt": published_at,
+        "scheduled": True,
+        "title": title,
+        "images": images,
+    })
+    posts.sort(key=lambda p: p.get("publishedAt") or "", reverse=True)
+    cache["posts"] = posts
+    cache["generatedAt"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    write_cache_atomic(cache, cache_path)
+    logger.info(f"Recorded scheduled post {post_id} in {cache_path}")
+    return True
+
+
 def load_cache(path: Path) -> Optional[dict]:
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -592,8 +636,12 @@ def _image_dimensions(path: Path) -> tuple:
     return 0, 0
 
 
-def _upload_and_attach(client, post_id, path: Path, index: int) -> None:
-    """Upload one image and attach it to the draft post at the given index."""
+def _upload_and_attach(client, post_id, path: Path, index: int) -> Dict[str, Any]:
+    """Upload one image and attach it to the draft post at the given index.
+
+    Returns a cache-shaped image dict (id/name/url/width/height/nsfwLevel)
+    built from the post.addImage response, so the caller can record the post
+    locally without another fetch."""
     width, height = _image_dimensions(path)
     mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
             "webp": "image/webp", "gif": "image/gif"}.get(path.suffix.lower().lstrip("."),
@@ -633,6 +681,17 @@ def _upload_and_attach(client, post_id, path: Path, index: int) -> None:
         raise RuntimeError(f"upload: post.addImage failed for {path.name} "
                            f"(HTTP {resp.status_code}): {resp.text[:300]}")
     logger.info(f"Attached {path.name} to post at index {index}")
+
+    created = _trpc_json(resp)
+    created = created if isinstance(created, dict) else {}
+    return {
+        "id": created.get("id") or 0,
+        "name": created.get("name") or path.name,
+        "url": created.get("url") or upload_key,
+        "width": created.get("width") or width,
+        "height": created.get("height") or height,
+        "nsfwLevel": created.get("nsfwLevel"),
+    }
 
 
 def schedule_post(client, file_paths, publish_at: str, title: Optional[str],
@@ -674,9 +733,10 @@ def schedule_post(client, file_paths, publish_at: str, title: Optional[str],
 
     try:
         # 2. Upload + attach every image, in selection order
+        attached_images: List[Dict[str, Any]] = []
         for index, path in enumerate(paths):
             report(f"Uploading image {index + 1} of {len(paths)}: {path.name}…")
-            _upload_and_attach(client, post_id, path, index)
+            attached_images.append(_upload_and_attach(client, post_id, path, index))
 
         # 3. Title (optional) + schedule
         report("Scheduling the post…")
@@ -693,7 +753,7 @@ def schedule_post(client, file_paths, publish_at: str, title: Optional[str],
         logger.info(f"Scheduled post {post_id} for {publish_utc}")
 
         return {"status": "ok", "postId": post_id, "publishedAt": publish_utc,
-                "images": len(paths)}
+                "images": len(paths), "postImages": attached_images}
 
     except Exception:
         # Roll back the draft so failed attempts don't litter the account.

@@ -324,16 +324,24 @@ public class CivitaiPostsService
     /// </summary>
     public int MarkMatchedAsPosted(List<ResolvedPostImage> resolved)
     {
+        return MarkImagesAsPosted(resolved
+            .Where(r => r.Status == MatchStatus.Matched && r.LocalImageId.HasValue)
+            .Select(r => r.LocalImageId!.Value));
+    }
+
+    /// <summary>
+    /// Adds the given library images to the "Posted" album (created on demand).
+    /// Used both for matched calendar images and for images the user just
+    /// scheduled from the Schedule tab. Returns the number of images tagged.
+    /// </summary>
+    public int MarkImagesAsPosted(IEnumerable<int> imageIds)
+    {
         try
         {
             var dataStore = ServiceLocator.DataStore;
             if (dataStore == null) return 0;
 
-            var ids = resolved
-                .Where(r => r.Status == MatchStatus.Matched && r.LocalImageId.HasValue)
-                .Select(r => r.LocalImageId!.Value)
-                .Distinct()
-                .ToList();
+            var ids = imageIds.Distinct().ToList();
             if (ids.Count == 0) return 0;
 
             var album = dataStore.GetAlbumByName(PostedAlbumName)

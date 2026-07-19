@@ -568,6 +568,18 @@ def cmd_schedule_post(args, orchestrator: DownloadOrchestrator, config: dict):
         print(json_module.dumps({"error": "schedule", "message": str(e)}), file=real_stdout)
         sys.exit(1)
 
+    # Record the new post straight into the calendar cache so it shows up
+    # immediately - best-effort: a cache hiccup must not fail the scheduling.
+    try:
+        posts_fetcher.record_scheduled_post(
+            orchestrator.api_client, posts_fetcher.default_cache_path(),
+            result.get("postId"), result.get("publishedAt"),
+            args.title, result.get("postImages") or [])
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Could not record scheduled post in calendar cache: {e}")
+
     print(json_module.dumps(result), file=real_stdout)
 
 

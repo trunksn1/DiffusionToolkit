@@ -60,12 +60,27 @@ namespace Diffusion.Toolkit.Pages
 
             ServiceLocator.NavigatorService.OnNavigate += (sender, args) =>
             {
-                if (this == args.TargetPage && !_isLoaded)
+                if (this != args.TargetPage) return;
+                if (!_isLoaded)
                 {
                     _isLoaded = true;
                     _ = LoadCacheAndBuildAsync();
                 }
+                else if (!_model.IsRefreshing && CacheFileTimeUtc() != _cacheStampUtc)
+                {
+                    // The cache changed outside this page (e.g. a post was
+                    // scheduled from the metadata panel's Schedule tab).
+                    _ = LoadCacheAndBuildAsync();
+                }
             };
+        }
+
+        private DateTime _cacheStampUtc;
+
+        private static DateTime CacheFileTimeUtc()
+        {
+            var path = CivitaiPostsService.CachePath;
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
         }
 
         // --- Panel layout (show/hide/resize) --------------------------------
@@ -96,6 +111,10 @@ namespace Diffusion.Toolkit.Pages
 
         private async Task LoadCacheAndBuildAsync()
         {
+            // Stamp before reading: a write racing the read just means one
+            // harmless extra reload on the next navigation.
+            _cacheStampUtc = CacheFileTimeUtc();
+
             // One cache read, matching, and Posted-album tagging off the UI
             // thread; the await continuation resumes on the UI thread.
             var (cache, resolved) = await Task.Run(() =>
