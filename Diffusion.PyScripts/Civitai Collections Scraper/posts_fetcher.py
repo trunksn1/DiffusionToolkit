@@ -74,11 +74,21 @@ def _trpc_query(client, procedure: str, input_json: Dict[str, Any], timeout=30):
                             params=params, timeout=timeout)
 
 
-def _trpc_mutate(client, procedure: str, input_json: Dict[str, Any], timeout=30):
-    """Write mutations use the cookie session (write-tRPC generally requires it)."""
+def _trpc_mutate(client, procedure: str, input_json: Dict[str, Any], timeout=30,
+                 meta: Optional[Dict[str, Any]] = None):
+    """Write mutations use the cookie session (write-tRPC generally requires it).
+
+    meta is the superjson annotation block: CivitAI's tRPC layer deserializes
+    input with superjson, so typed values (e.g. Date) must be declared there
+    or they arrive as plain strings and fail Zod validation. Example:
+    meta={"values": {"publishedAt": ["Date"]}}
+    """
     client._ensure_cookies()
+    body: Dict[str, Any] = {"json": input_json}
+    if meta:
+        body["meta"] = meta
     return client.session.post(f"{client.trpc_url}/{procedure}",
-                               json={"json": input_json}, timeout=timeout)
+                               json=body, timeout=timeout)
 
 
 def _trpc_json(resp) -> Any:
@@ -673,7 +683,10 @@ def schedule_post(client, file_paths, publish_at: str, title: Optional[str],
         update_input: Dict[str, Any] = {"id": post_id, "publishedAt": publish_utc}
         if title:
             update_input["title"] = title
-        resp = _trpc_mutate(client, "post.update", update_input)
+        # publishedAt must be superjson-tagged as a Date or the server's Zod
+        # schema rejects it with "expected date, received string".
+        resp = _trpc_mutate(client, "post.update", update_input,
+                            meta={"values": {"publishedAt": ["Date"]}})
         if resp.status_code != 200:
             raise RuntimeError(f"schedule: post.update failed (HTTP {resp.status_code}): "
                                f"{resp.text[:300]}")
