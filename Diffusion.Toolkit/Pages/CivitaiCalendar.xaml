@@ -136,7 +136,7 @@
                                     Background="{DynamicResource ControlBackgroundBrush}"
                                     MouseLeftButtonUp="DayCell_Click" AllowDrop="True"
                                     Drop="DayCell_Drop" DragOver="DayCell_DragOver"
-                                    Tag="{Binding}">
+                                    Tag="{Binding}" ClipToBounds="True">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Style.Triggers>
@@ -174,18 +174,36 @@
                                                    Foreground="{StaticResource ScheduledBrush}" ToolTip="Has queued/scheduled posts"
                                                    Visibility="{Binding HasScheduled, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                     </DockPanel>
-                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding Thumbnails}" VerticalAlignment="Top" Margin="0,2,0,0">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel/>
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Image Source="{Binding}" Width="28" Height="28" Margin="1" Stretch="UniformToFill"/>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
+                                    <Grid Grid.Row="1">
+                                        <ItemsControl ItemsSource="{Binding CellImages}" VerticalAlignment="Top" Margin="0,2,0,0">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Width="40" Height="40" Margin="1" CornerRadius="2"
+                                                            Background="{DynamicResource PreviewBackgroundBrush}"
+                                                            ClipToBounds="True"
+                                                            ToolTip="{Binding Name}">
+                                                        <Grid>
+                                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                            <TextBlock Text="?" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource ForegroundBrush}" Opacity="0.25"
+                                                                       Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=invert}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" CornerRadius="8"
+                                                Padding="5,1" Margin="0,0,1,1" Background="#A0000000"
+                                                Visibility="{Binding HasOverflow, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding OverflowText}" Foreground="White" FontSize="10"
+                                                       ToolTip="More images this day — click the cell to see them all in the day view"/>
+                                        </Border>
+                                    </Grid>
                                 </Grid>
                             </Border>
                         </DataTemplate>
@@ -250,7 +268,7 @@
                                                 </TextBlock>
                                                 <TextBlock DockPanel.Dock="Right" Text="⏱ Queued" FontSize="11"
                                                            Foreground="{StaticResource ScheduledBrush}"
-                                                           Visibility="{Binding Scheduled, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                           Visibility="{Binding IsQueued, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                             </DockPanel>
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="11"
                                                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.7"/>

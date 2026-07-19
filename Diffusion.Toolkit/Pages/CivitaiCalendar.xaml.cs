@@ -182,7 +182,10 @@ namespace Diffusion.Toolkit.Pages
                     IsToday = date.Date == today,
                     IsFuture = date.Date > today,
                     Images = images,
-                    HasScheduled = images.Any(im => im.Scheduled),
+                    // Queue markers only make sense while the post is still
+                    // waiting to go live; past posts are public already.
+                    HasScheduled = images.Any(im => im.IsQueued),
+                    CellImages = images.Take(MaxCellThumbnails).ToList(),
                 };
                 _model.Days.Add(day);
                 if (selectedDate != null && date.Date == selectedDate.Value.Date)
@@ -190,7 +193,7 @@ namespace Diffusion.Toolkit.Pages
                     reselect = day;
                 }
 
-                LoadDayThumbnails(day);
+                LoadThumbnails(day.CellImages);
             }
 
             SelectDay(reselect);
@@ -203,18 +206,23 @@ namespace Diffusion.Toolkit.Pages
             if (day != null)
             {
                 day.IsSelected = true;
-                LoadRowThumbnails(day);
+                LoadThumbnails(day.Images);
             }
         }
 
+        /// <summary>Cap on mini-thumbnails inside a month cell; the rest shows as a "+N" badge.</summary>
+        private const int MaxCellThumbnails = 8;
+
         /// <summary>
-        /// 96px thumbnails for the day-view rows, loaded once per image:
-        /// matched images from the local file, unmatched ones straight from
-        /// the CivitAI CDN (WPF downloads the BitmapImage URI itself).
+        /// 96px thumbnails, loaded once per image and shared between the month
+        /// cells and the day-view rows: matched images from the local file,
+        /// unmatched ones straight from the CivitAI CDN (WPF downloads the
+        /// BitmapImage URI itself). Images that fail both ways keep a null
+        /// Thumbnail, which the XAML renders as a "?" placeholder.
         /// </summary>
-        private void LoadRowThumbnails(CalendarDayModel day)
+        private void LoadThumbnails(IEnumerable<ResolvedPostImage> images)
         {
-            foreach (var image in day.Images.Where(im => im.Thumbnail == null))
+            foreach (var image in images.Where(im => im.Thumbnail == null))
             {
                 var target = image;
                 if (target.LocalPath != null && File.Exists(target.LocalPath))
@@ -238,6 +246,13 @@ namespace Diffusion.Toolkit.Pages
                         bmp.UriSource = new System.Uri(CivitaiPostsService.CdnThumbnailUrl(target.Url!, target.Name));
                         bmp.CacheOption = BitmapCacheOption.OnDemand;
                         bmp.EndInit();
+                        // On download failure fall back to the "?" placeholder
+                        // instead of leaving a silently blank tile.
+                        bmp.DownloadFailed += (_, args) =>
+                        {
+                            Logger.Log($"CivitaiCalendar: CDN thumbnail download failed for {target.CivitaiImageId}: {args.ErrorException?.Message}");
+                            target.Thumbnail = null;
+                        };
                         target.Thumbnail = bmp;
                     }
                     catch (Exception ex)
@@ -245,25 +260,6 @@ namespace Diffusion.Toolkit.Pages
                         Logger.Log($"CivitaiCalendar: CDN thumbnail failed for {target.CivitaiImageId}: {ex.Message}");
                     }
                 }
-            }
-        }
-
-        private void LoadDayThumbnails(CalendarDayModel day)
-        {
-            foreach (var image in day.Images.Where(im => im.LocalPath != null).Take(4))
-            {
-                var path = image.LocalPath!;
-                if (!File.Exists(path)) continue;
-
-                _ = ServiceLocator.ThumbnailService.QueueAsync(
-                    new ThumbnailJob { Path = path, Width = 64, Height = 64, EntryType = EntryType.File },
-                    result =>
-                    {
-                        if (result.Success && result.Image != null)
-                        {
-                            Dispatcher.Invoke(() => day.Thumbnails.Add(result.Image));
-                        }
-                    });
             }
         }
 

@@ -151,5 +151,9 @@ public class CalendarDayModel : BaseNotify
 
     public int DayNumber => Date.Day;
 
-    public ObservableCollection<ImageSource> Thumbnails { get; } = new();
+    /// <summary>The subset of Images shown as mini-thumbnails inside the month cell.</summary>
+    public List<ResolvedPostImage> CellImages { get; init; } = new();
+    public int OverflowCount => Images.Count - CellImages.Count;
+    public bool HasOverflow => OverflowCount > 0;
+    public string OverflowText => $"+{OverflowCount}";
 }

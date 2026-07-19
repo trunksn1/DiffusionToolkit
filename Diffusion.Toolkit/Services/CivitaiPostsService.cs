@@ -95,13 +95,29 @@ public class CivitaiPostsService
     /// </summary>
     public Task<PythonResult> SchedulePostAsync(string filePath, DateTime publishAtLocal, string? title)
     {
+        return SchedulePostAsync(new[] { filePath }, publishAtLocal, title);
+    }
+
+    /// <summary>
+    /// Creates a single scheduled post on CivitAI containing every file in
+    /// <paramref name="filePaths"/> (in order). publishAtLocal is converted to
+    /// an ISO 8601 string with local offset.
+    /// </summary>
+    public Task<PythonResult> SchedulePostAsync(IEnumerable<string> filePaths, DateTime publishAtLocal, string? title,
+        Action<string>? onProgress = null, CancellationToken cancellationToken = default)
+    {
         var iso = new DateTimeOffset(publishAtLocal).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
-        var arguments = $"main.py schedule-post --file \"{filePath}\" --publish-at \"{iso}\"";
+        var arguments = new StringBuilder("main.py schedule-post");
+        foreach (var filePath in filePaths)
+        {
+            arguments.Append($" --file \"{filePath}\"");
+        }
+        arguments.Append($" --publish-at \"{iso}\"");
         if (!string.IsNullOrWhiteSpace(title))
         {
-            arguments += $" --title \"{title.Replace("\"", "'")}\"";
+            arguments.Append($" --title \"{title.Replace("\"", "'")}\"");
         }
-        return RunPythonAsync(arguments);
+        return RunPythonAsync(arguments.ToString(), onProgress, cancellationToken);
     }
 
     private async Task<PythonResult> RunPythonAsync(string arguments, Action<string>? onProgress = null,
@@ -606,6 +622,13 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
 
     public bool IsAmbiguous => Status == MatchStatus.Ambiguous;
     public bool IsUnmatched => Status == MatchStatus.Unmatched;
+
+    /// <summary>
+    /// True only while the post is still waiting to go live: the queue marker
+    /// is meaningless once the scheduled time has passed and the post is
+    /// publicly visible on CivitAI.
+    /// </summary>
+    public bool IsQueued => Scheduled && PublishedAtUtc > DateTime.UtcNow;
     public string CivitaiImageUrl => $"https://civitai.com/images/{CivitaiImageId}";
     public string CivitaiPostUrl => $"https://civitai.com/posts/{PostId}";
 }

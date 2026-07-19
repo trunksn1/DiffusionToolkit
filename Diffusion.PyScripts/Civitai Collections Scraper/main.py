@@ -544,15 +544,19 @@ def cmd_posts(args, orchestrator: DownloadOrchestrator, config: dict):
 
 
 def cmd_schedule_post(args, orchestrator: DownloadOrchestrator, config: dict):
-    """Create a scheduled CivitAI post from a local image file."""
+    """Create a scheduled CivitAI post from one or more local image files."""
     import json as json_module
     import posts_fetcher
 
     real_stdout = sys.__stdout__
 
+    def report_progress(message):
+        print(json_module.dumps({"progress": message}), file=real_stdout, flush=True)
+
     try:
         result = posts_fetcher.schedule_post(
-            orchestrator.api_client, args.file, args.publish_at, args.title)
+            orchestrator.api_client, args.file, args.publish_at, args.title,
+            progress=report_progress)
     except RuntimeError as e:
         message = str(e)
         category, _, detail = message.partition(":")
@@ -653,8 +657,9 @@ Examples:
                               help='CivitAI username (default: resolved via API key)')
 
     schedule_parser = subparsers.add_parser('schedule-post',
-                                            help='Create a scheduled CivitAI post from a local image')
-    schedule_parser.add_argument('--file', required=True, help='Path to the image file')
+                                            help='Create a scheduled CivitAI post from local images')
+    schedule_parser.add_argument('--file', required=True, action='append',
+                                 help='Path to an image file (repeat to post several images together)')
     schedule_parser.add_argument('--publish-at', required=True,
                                  help='Publish date-time, ISO 8601 (e.g. 2026-08-01T17:00:00+02:00)')
     schedule_parser.add_argument('--title', default=None, help='Optional post title')

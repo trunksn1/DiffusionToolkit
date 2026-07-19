@@ -582,25 +582,75 @@ def _image_dimensions(path: Path) -> tuple:
     return 0, 0
 
 
-def schedule_post(client, file_path: str, publish_at: str, title: Optional[str]) -> dict:
-    """Create a draft, upload the image, attach it, set publishedAt.
+def _upload_and_attach(client, post_id, path: Path, index: int) -> None:
+    """Upload one image and attach it to the draft post at the given index."""
+    width, height = _image_dimensions(path)
+    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "webp": "image/webp", "gif": "image/gif"}.get(path.suffix.lower().lstrip("."),
+                                                          "application/octet-stream")
 
-    Returns {"status":"ok","postId":...,"publishedAt":...} or raises RuntimeError
-    with a category prefix ('auth:', 'upload:', 'schedule:').
+    # Upload handshake + PUT
+    resp = client.session.post(f"{client.api_base}/v1/image-upload",
+                               json={"filename": path.name, "metadata": {}},
+                               timeout=30)
+    if resp.status_code != 200:
+        raise RuntimeError(f"upload: image-upload handshake failed for {path.name} "
+                           f"(HTTP {resp.status_code})")
+    body = resp.json()
+    upload_url = body.get("uploadURL") or body.get("uploadUrl") or body.get("url")
+    upload_key = body.get("id") or body.get("key")
+    if not upload_url or not upload_key:
+        raise RuntimeError(f"upload: handshake response missing url/key (keys={sorted(body.keys())})")
+
+    with open(path, "rb") as f:
+        put = client.session.put(upload_url, data=f,
+                                 headers={"Content-Type": mime}, timeout=300)
+    if put.status_code not in (200, 201, 204):
+        raise RuntimeError(f"upload: PUT failed for {path.name} (HTTP {put.status_code})")
+    logger.info(f"Uploaded image bytes for {path.name}")
+
+    # Attach to post
+    resp = _trpc_mutate(client, "post.addImage", {
+        "postId": post_id,
+        "url": upload_key,
+        "name": path.name,
+        "width": width,
+        "height": height,
+        "index": index,
+        "mimeType": mime,
+    })
+    if resp.status_code != 200:
+        raise RuntimeError(f"upload: post.addImage failed for {path.name} "
+                           f"(HTTP {resp.status_code}): {resp.text[:300]}")
+    logger.info(f"Attached {path.name} to post at index {index}")
+
+
+def schedule_post(client, file_paths, publish_at: str, title: Optional[str],
+                  progress=None) -> dict:
+    """Create a draft, upload the image(s), attach them, set publishedAt.
+
+    file_paths may be a single path string or a list of paths; all files end up
+    in one post, in the given order. Returns {"status":"ok","postId":...,
+    "publishedAt":...,"images":N} or raises RuntimeError with a category prefix
+    ('auth:', 'upload:', 'schedule:').
     """
-    path = Path(file_path)
-    if not path.is_file():
-        raise RuntimeError(f"upload: file not found: {file_path}")
+    if isinstance(file_paths, str):
+        file_paths = [file_paths]
+    paths = [Path(p) for p in file_paths]
+    if not paths:
+        raise RuntimeError("upload: no files given")
+    for path in paths:
+        if not path.is_file():
+            raise RuntimeError(f"upload: file not found: {path}")
 
     publish_dt = _parse_iso(publish_at)
     if publish_dt is None:
         raise RuntimeError(f"schedule: invalid --publish-at value: {publish_at}")
     publish_utc = publish_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    width, height = _image_dimensions(path)
-    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-            "webp": "image/webp", "gif": "image/gif"}.get(path.suffix.lower().lstrip("."),
-                                                          "application/octet-stream")
+    def report(message):
+        if progress:
+            progress(message)
 
     # 1. Draft post
     resp = _trpc_mutate(client, "post.create", {"authed": True})
@@ -613,41 +663,13 @@ def schedule_post(client, file_path: str, publish_at: str, title: Optional[str])
     logger.info(f"Created draft post {post_id}")
 
     try:
-        # 2. Upload handshake + PUT
-        resp = client.session.post(f"{client.api_base}/v1/image-upload",
-                                   json={"filename": path.name, "metadata": {}},
-                                   timeout=30)
-        if resp.status_code != 200:
-            raise RuntimeError(f"upload: image-upload handshake failed (HTTP {resp.status_code})")
-        body = resp.json()
-        upload_url = body.get("uploadURL") or body.get("uploadUrl") or body.get("url")
-        upload_key = body.get("id") or body.get("key")
-        if not upload_url or not upload_key:
-            raise RuntimeError(f"upload: handshake response missing url/key (keys={sorted(body.keys())})")
+        # 2. Upload + attach every image, in selection order
+        for index, path in enumerate(paths):
+            report(f"Uploading image {index + 1} of {len(paths)}: {path.name}…")
+            _upload_and_attach(client, post_id, path, index)
 
-        with open(path, "rb") as f:
-            put = client.session.put(upload_url, data=f,
-                                     headers={"Content-Type": mime}, timeout=300)
-        if put.status_code not in (200, 201, 204):
-            raise RuntimeError(f"upload: PUT failed (HTTP {put.status_code})")
-        logger.info("Uploaded image bytes")
-
-        # 3. Attach to post
-        resp = _trpc_mutate(client, "post.addImage", {
-            "postId": post_id,
-            "url": upload_key,
-            "name": path.name,
-            "width": width,
-            "height": height,
-            "index": 0,
-            "mimeType": mime,
-        })
-        if resp.status_code != 200:
-            raise RuntimeError(f"upload: post.addImage failed (HTTP {resp.status_code}): "
-                               f"{resp.text[:300]}")
-        logger.info("Attached image to post")
-
-        # 4. Title (optional) + schedule
+        # 3. Title (optional) + schedule
+        report("Scheduling the post…")
         update_input: Dict[str, Any] = {"id": post_id, "publishedAt": publish_utc}
         if title:
             update_input["title"] = title
@@ -657,7 +679,8 @@ def schedule_post(client, file_path: str, publish_at: str, title: Optional[str])
                                f"{resp.text[:300]}")
         logger.info(f"Scheduled post {post_id} for {publish_utc}")
 
-        return {"status": "ok", "postId": post_id, "publishedAt": publish_utc}
+        return {"status": "ok", "postId": post_id, "publishedAt": publish_utc,
+                "images": len(paths)}
 
     except Exception:
         # Roll back the draft so failed attempts don't litter the account.
