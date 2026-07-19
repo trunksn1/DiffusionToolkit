@@ -127,6 +127,7 @@ public class CivitaiCalendarModel : BaseNotify
     public ICommand? FetchUpcomingCommand { get; set; }
     public ICommand? RecoverHistoryCommand { get; set; }
     public ICommand? CancelFetchCommand { get; set; }
+    public ICommand? DownloadMissingCommand { get; set; }
 }
 
 public class CalendarDayModel : BaseNotify

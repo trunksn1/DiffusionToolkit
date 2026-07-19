@@ -207,6 +207,96 @@ public class CivitaiPostsService
 
     public const string PostedAlbumName = "Posted";
 
+    /// <summary>Subfolder of the first root folder that receives downloads.</summary>
+    public const string PostedFolderName = "Posted";
+
+    // CivitAI's public image CDN prefix (present in every civitai image URL).
+    private const string CdnPrefix = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA";
+
+    private static readonly System.Net.Http.HttpClient DownloadClient = CreateDownloadClient();
+
+    private static System.Net.Http.HttpClient CreateDownloadClient()
+    {
+        var client = new System.Net.Http.HttpClient();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+        client.Timeout = TimeSpan.FromMinutes(5);
+        return client;
+    }
+
+    /// <summary>
+    /// Downloads posted CivitAI images that have no local match into
+    /// "&lt;first root folder&gt;\Posted". After the app rescans its folders,
+    /// the next calendar refresh matches them and adds them to the Posted
+    /// album automatically.
+    /// </summary>
+    public async Task<(int downloaded, int skipped, int failed, string? folder)> DownloadMissingAsync(
+        List<ResolvedPostImage> resolved, Action<string>? onProgress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var root = ServiceLocator.FolderService?.RootFolders?.FirstOrDefault()?.Path;
+        if (root == null || !Directory.Exists(root))
+        {
+            return (0, 0, 0, null);
+        }
+        var folder = Path.Combine(root, PostedFolderName);
+        Directory.CreateDirectory(folder);
+
+        // One download per CivitAI image id; needs the CDN key (Url) and a name.
+        var targets = resolved
+            .Where(r => r.Status == MatchStatus.Unmatched
+                        && !string.IsNullOrWhiteSpace(r.Url)
+                        && !string.IsNullOrWhiteSpace(r.Name))
+            .GroupBy(r => r.CivitaiImageId)
+            .Select(g => g.First())
+            .ToList();
+
+        int downloaded = 0, skipped = 0, failed = 0;
+        for (int i = 0; i < targets.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var image = targets[i];
+            onProgress?.Invoke($"Downloading missing images: {i + 1} of {targets.Count}…");
+
+            var fileName = SanitizeFileName(image.Name!);
+            if (!Path.HasExtension(fileName)) fileName += ".jpeg";
+            var target = Path.Combine(folder, fileName);
+            if (File.Exists(target))
+            {
+                skipped++;
+                continue;
+            }
+
+            try
+            {
+                // original=true returns the file as uploaded (original format).
+                var url = $"{CdnPrefix}/{image.Url}/original=true/{Uri.EscapeDataString(fileName)}";
+                var bytes = await DownloadClient.GetByteArrayAsync(url, cancellationToken);
+                await File.WriteAllBytesAsync(target, bytes, cancellationToken);
+                downloaded++;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                Logger.Log($"CivitaiPostsService: download failed for image {image.CivitaiImageId} ({image.Name}): {e.Message}");
+                failed++;
+            }
+        }
+
+        return (downloaded, skipped, failed, folder);
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            name = name.Replace(c, '_');
+        }
+        return name;
+    }
+
     /// <summary>
     /// Assigns every matched local image to the "Posted" album (created on
     /// demand). AddImagesToAlbum uses INSERT OR IGNORE, so images already in
@@ -480,8 +570,22 @@ public enum MatchStatus
     Unmatched
 }
 
-public class ResolvedPostImage
+public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
 {
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+    // Lazily-loaded 96px thumbnail for the day-view rows.
+    private System.Windows.Media.ImageSource? _thumbnail;
+    public System.Windows.Media.ImageSource? Thumbnail
+    {
+        get => _thumbnail;
+        set
+        {
+            _thumbnail = value;
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Thumbnail)));
+        }
+    }
+
     public long CivitaiImageId { get; set; }
     public string? Name { get; set; }
     public string? Url { get; set; }

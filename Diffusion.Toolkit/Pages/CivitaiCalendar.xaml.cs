@@ -44,6 +44,7 @@ namespace Diffusion.Toolkit.Pages
             _model.FetchUpcomingCommand = new RelayCommand<object>(async _ => await FetchUpcomingAsync());
             _model.RecoverHistoryCommand = new RelayCommand<object>(_ => RecoverHistory());
             _model.CancelFetchCommand = new RelayCommand<object>(_ => _fetchCts?.Cancel());
+            _model.DownloadMissingCommand = new RelayCommand<object>(async _ => await DownloadMissingAsync());
 
             _model.PropertyChanged += (_, args) =>
             {
@@ -199,7 +200,31 @@ namespace Diffusion.Toolkit.Pages
         {
             if (_model.SelectedDay != null) _model.SelectedDay.IsSelected = false;
             _model.SelectedDay = day;
-            if (day != null) day.IsSelected = true;
+            if (day != null)
+            {
+                day.IsSelected = true;
+                LoadRowThumbnails(day);
+            }
+        }
+
+        /// <summary>96px thumbnails for the day-view rows, loaded once per image.</summary>
+        private void LoadRowThumbnails(CalendarDayModel day)
+        {
+            foreach (var image in day.Images.Where(im => im.Thumbnail == null && im.LocalPath != null))
+            {
+                var target = image;
+                if (!File.Exists(target.LocalPath)) continue;
+
+                _ = ServiceLocator.ThumbnailService.QueueAsync(
+                    new ThumbnailJob { Path = target.LocalPath!, Width = 96, Height = 96, EntryType = EntryType.File },
+                    result =>
+                    {
+                        if (result.Success && result.Image != null)
+                        {
+                            Dispatcher.Invoke(() => target.Thumbnail = result.Image);
+                        }
+                    });
+            }
         }
 
         private void LoadDayThumbnails(CalendarDayModel day)
@@ -281,6 +306,64 @@ namespace Diffusion.Toolkit.Pages
                 }
                 _model.StatusText = "Matching to your library…";
                 await LoadCacheAndBuildAsync();
+            }
+            finally
+            {
+                _fetchCts = null;
+                _model.IsRefreshing = false;
+                _model.StatusText = null;
+            }
+        }
+
+        /// <summary>
+        /// Downloads posted images that have no local match into
+        /// "&lt;first root folder&gt;\Posted", then prompts for a folder rescan
+        /// so they enter the library (the next refresh then matches + tags them).
+        /// </summary>
+        private async Task DownloadMissingAsync()
+        {
+            if (_model.IsRefreshing) return;
+            var missing = _resolved.Count(r => r.IsUnmatched && !string.IsNullOrWhiteSpace(r.Url));
+            if (missing == 0)
+            {
+                ServiceLocator.ToastService?.Toast("No missing images to download — everything is matched locally.", "CivitAI");
+                return;
+            }
+            if (MessageBox.Show(Window.GetWindow(this),
+                    $"Download {missing} posted image(s) that are not in your library into the 'Posted' subfolder of your first root folder?",
+                    "Download Missing", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            using var cts = new System.Threading.CancellationTokenSource();
+            _fetchCts = cts;
+            _model.IsRefreshing = true;
+            _model.StatusText = "Downloading missing images…";
+            try
+            {
+                void OnProgress(string message) =>
+                    Dispatcher.BeginInvoke(() => _model.StatusText = message);
+
+                var (downloaded, skipped, failed, folder) =
+                    await _service.DownloadMissingAsync(_resolved, OnProgress, cts.Token);
+
+                if (folder == null)
+                {
+                    MessageBox.Show(Window.GetWindow(this),
+                        "No root folder is configured — add one in Settings first.",
+                        "Download Missing", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                ServiceLocator.ToastService?.Toast(
+                    $"Downloaded {downloaded} image(s) to {folder}" +
+                    (skipped > 0 ? $", {skipped} already present" : "") +
+                    (failed > 0 ? $", {failed} failed" : "") +
+                    ". Rescan your folders to import them.", "CivitAI");
+            }
+            catch (OperationCanceledException)
+            {
+                // user pressed Cancel
             }
             finally
             {

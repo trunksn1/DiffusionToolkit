@@ -40,6 +40,10 @@
                     Padding="12,4" Margin="6,0,0,0"
                     ToolTip="Rebuild the full history of your posts, back to a date you choose."
                     IsEnabled="{Binding IsRefreshing, Converter={StaticResource InverseBoolConverter}}"/>
+            <Button Content="⬇ Download missing" Command="{Binding DownloadMissingCommand}" DockPanel.Dock="Right"
+                    Padding="12,4" Margin="6,0,0,0"
+                    ToolTip="Download posted images that are not in your library into the 'Posted' subfolder of your first root folder."
+                    IsEnabled="{Binding IsRefreshing, Converter={StaticResource InverseBoolConverter}}"/>
             <TextBlock Text="{Binding LastUpdated}" DockPanel.Dock="Right" VerticalAlignment="Center"
                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.6" Margin="6,0"/>
         </DockPanel>
@@ -226,6 +230,16 @@
                                             BorderBrush="{DynamicResource NormalBorderBrush}"
                                             Background="Transparent"
                                             MouseLeftButtonUp="DayImage_Click" Tag="{Binding}">
+                                      <DockPanel LastChildFill="True">
+                                        <Border DockPanel.Dock="Left" Width="48" Height="48" Margin="0,0,8,0"
+                                                CornerRadius="3" Background="{DynamicResource PreviewBackgroundBrush}">
+                                            <Grid>
+                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                <TextBlock Text="?" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource ForegroundBrush}" Opacity="0.3"
+                                                           Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=invert}"/>
+                                            </Grid>
+                                        </Border>
                                         <StackPanel>
                                             <DockPanel LastChildFill="False">
                                                 <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold"
@@ -248,10 +262,11 @@
                                             <TextBlock Text="⚠ multiple local matches — best candidate shown in preview" FontSize="10"
                                                        Foreground="{StaticResource ScheduledBrush}"
                                                        Visibility="{Binding IsAmbiguous, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                            <TextBlock Text="✗ no local file matched — use Open on CivitAI" FontSize="10"
+                                            <TextBlock Text="✗ no local file matched — use ⬇ Download missing or Open on CivitAI" FontSize="10"
                                                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.5"
                                                        Visibility="{Binding IsUnmatched, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         </StackPanel>
+                                      </DockPanel>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
