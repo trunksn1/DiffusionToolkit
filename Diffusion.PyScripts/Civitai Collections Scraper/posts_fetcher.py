@@ -44,13 +44,11 @@ QUEUE_FLAG_WINDOW_DAYS = 30
 #   that is the pending queue. queued = authenticated ids - anonymous ids.
 #
 # FUTURE-scheduled posts (publishedAt > now), verified live 2026-07-19:
-# - Every feed clamps publishedAt <= now under Bearer auth: baseline, pending,
-#   section=draft/scheduled, draftOnly, synthetic future cursors, and the SSR
-#   page all return NO future posts (per-item post.get/image.get DO return
-#   them, so the data exists).
-# - Only a real browser COOKIE session receives future posts from the draft
-#   section (that is how the website renders the user's schedule), so the
-#   future pass below bypasses Bearer entirely and requires fresh cookies.
+# - Feeds clamp publishedAt <= now UNLESS the input carries {"scheduled": true}
+#   (per civitai's post.service.ts, the flag relaxes the clamp to include the
+#   requesting user's own future posts). Works with Bearer AND cookie sessions.
+# - Without that flag NOTHING helps: sections, draftOnly, synthetic future
+#   cursors, and the SSR page all come back clamped.
 
 
 def default_cache_path() -> Path:
@@ -325,37 +323,33 @@ def _fetch_public_ids(client, username: str,
 
 def _fetch_future_posts(client, username: str, warnings: List[str],
                         progress=None) -> List[Dict[str, Any]]:
-    """Posts scheduled for the FUTURE, via the cookie session only.
+    """Posts scheduled for the FUTURE, via post.getInfinite {scheduled: true}.
 
-    Bearer-authenticated feeds clamp publishedAt <= now (verified live);
-    only a real browser cookie session receives future posts from the draft
-    section. sort=Newest puts future posts first, so paging stops at the
-    first page that contains no future-dated post.
+    Found in civitai's source (post.service.ts): the `scheduled` input flag
+    relaxes the publishedAt <= NOW() clamp to also return the requesting
+    user's own future posts. Verified live 2026-07-19: works with both the
+    Bearer key and cookie sessions (goes through _auth_get, so the usual
+    Bearer-first / cookie-fallback applies).
     """
     _emit(progress, "Checking future-scheduled posts…")
-    client._ensure_cookies()
 
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
     future: List[Dict[str, Any]] = []
+    seen: set = set()
     cursor = None
     pages = 0
     while True:
         input_json: Dict[str, Any] = {"username": username, "period": "AllTime",
                                       "sort": "Newest", "limit": 50,
-                                      "section": "draft", "authed": True}
+                                      "scheduled": True, "authed": True}
         if cursor is not None:
             input_json["cursor"] = cursor
-        params = {"input": json.dumps({"json": input_json}, separators=(",", ":"))}
         try:
-            # Plain session.get: cookies, no Bearer header.
-            resp = client.session.get(f"{client.trpc_url}/post.getInfinite",
-                                      params=params, timeout=30)
+            resp = _trpc_query(client, "post.getInfinite", input_json)
         except Exception as e:
             warnings.append(f"future-posts fetch failed: {e}")
             return future
         if resp.status_code != 200:
-            warnings.append(f"future-posts fetch HTTP {resp.status_code} - "
-                            "refresh your cookies file to see scheduled posts")
+            warnings.append(f"future-posts fetch HTTP {resp.status_code}")
             return future
 
         try:
@@ -367,23 +361,29 @@ def _fetch_future_posts(client, username: str, warnings: List[str],
         if not items:
             break
 
-        page_future = 0
+        new_on_page = 0
         for post in items:
             if not isinstance(post, dict) or post.get("id") is None:
                 continue
             owner = (post.get("user") or {}).get("username")
             if owner and owner.lower() != username.lower():
                 continue
+            if post["id"] in seen:
+                continue
+            seen.add(post["id"])
+            # The scheduled feed mixes the future queue (first, sort=Newest)
+            # with published history further down - keep only future posts;
+            # past pending detection is the anonymous-diff's job.
             dt = _parse_iso(post.get("publishedAt"))
-            if dt and dt > now_utc:
+            if dt and dt > datetime.datetime.now(datetime.timezone.utc):
                 future.append(post)
-                page_future += 1
+                new_on_page += 1
 
         pages += 1
         _emit(progress, f"Checking future-scheduled posts: page {pages} "
                         f"({len(future)} found)…")
-        # Future posts sort first; a page without any means we are past them.
-        if page_future == 0 or not next_cursor or next_cursor == cursor:
+        # Future posts sort first; a page adding none means we are past them.
+        if new_on_page == 0 or not next_cursor or next_cursor == cursor:
             break
         if pages >= MAX_PAGES_PER_SECTION:
             warnings.append("future-posts: hit the page safety cap")
@@ -391,16 +391,7 @@ def _fetch_future_posts(client, username: str, warnings: List[str],
         cursor = next_cursor
         time.sleep(PAGE_DELAY_SECONDS)
 
-    if not future:
-        # Either the user has no scheduled posts, or the cookie session is
-        # stale (expired cookies degrade to the clamped listing silently).
-        warnings.append(
-            "No future-scheduled posts found. If you DO have scheduled posts "
-            "on civitai, refresh your cookies: log into civitai.com in Chrome, "
-            "export with 'Get cookies.txt LOCALLY', and save the file in the "
-            "Civitai Collections Scraper folder.")
-    else:
-        logger.info(f"Future-scheduled posts: {len(future)}")
+    logger.info(f"Future-scheduled posts: {len(future)}")
     return future
 
 

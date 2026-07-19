@@ -207,23 +207,44 @@ namespace Diffusion.Toolkit.Pages
             }
         }
 
-        /// <summary>96px thumbnails for the day-view rows, loaded once per image.</summary>
+        /// <summary>
+        /// 96px thumbnails for the day-view rows, loaded once per image:
+        /// matched images from the local file, unmatched ones straight from
+        /// the CivitAI CDN (WPF downloads the BitmapImage URI itself).
+        /// </summary>
         private void LoadRowThumbnails(CalendarDayModel day)
         {
-            foreach (var image in day.Images.Where(im => im.Thumbnail == null && im.LocalPath != null))
+            foreach (var image in day.Images.Where(im => im.Thumbnail == null))
             {
                 var target = image;
-                if (!File.Exists(target.LocalPath)) continue;
-
-                _ = ServiceLocator.ThumbnailService.QueueAsync(
-                    new ThumbnailJob { Path = target.LocalPath!, Width = 96, Height = 96, EntryType = EntryType.File },
-                    result =>
-                    {
-                        if (result.Success && result.Image != null)
+                if (target.LocalPath != null && File.Exists(target.LocalPath))
+                {
+                    _ = ServiceLocator.ThumbnailService.QueueAsync(
+                        new ThumbnailJob { Path = target.LocalPath!, Width = 96, Height = 96, EntryType = EntryType.File },
+                        result =>
                         {
-                            Dispatcher.Invoke(() => target.Thumbnail = result.Image);
-                        }
-                    });
+                            if (result.Success && result.Image != null)
+                            {
+                                Dispatcher.Invoke(() => target.Thumbnail = result.Image);
+                            }
+                        });
+                }
+                else if (!string.IsNullOrWhiteSpace(target.Url))
+                {
+                    try
+                    {
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = new System.Uri(CivitaiPostsService.CdnThumbnailUrl(target.Url!, target.Name));
+                        bmp.CacheOption = BitmapCacheOption.OnDemand;
+                        bmp.EndInit();
+                        target.Thumbnail = bmp;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"CivitaiCalendar: CDN thumbnail failed for {target.CivitaiImageId}: {ex.Message}");
+                    }
+                }
             }
         }
 

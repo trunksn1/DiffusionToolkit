@@ -213,6 +213,10 @@ public class CivitaiPostsService
     // CivitAI's public image CDN prefix (present in every civitai image URL).
     private const string CdnPrefix = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA";
 
+    /// <summary>Small CDN preview URL for a CivitAI image (its Url field is the CDN key).</summary>
+    public static string CdnThumbnailUrl(string cdnKey, string? name, int width = 96) =>
+        $"{CdnPrefix}/{cdnKey}/width={width}/{Uri.EscapeDataString(string.IsNullOrWhiteSpace(name) ? "image.jpeg" : name)}";
+
     private static readonly System.Net.Http.HttpClient DownloadClient = CreateDownloadClient();
 
     private static System.Net.Http.HttpClient CreateDownloadClient()
