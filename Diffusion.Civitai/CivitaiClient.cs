@@ -14,9 +14,14 @@ public class CivitaiClient : IDisposable
 
     public string BaseUrl => _baseUrl;
 
-    public CivitaiClient()
+    // Official CivitAI API key. Attached per-request (not as a default header) so
+    // the generation-data fetch can retry anonymously when the key is rejected.
+    private readonly string? _apiKey;
+
+    public CivitaiClient(string? apiKey = null)
     {
         _httpClient = new HttpClient();
+        _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
     }
 
     public async Task<Results<LiteModel>?> GetLiteModelsAsync(ModelSearchParameters searchParameters, CancellationToken token)
@@ -81,18 +86,38 @@ public class CivitaiClient : IDisposable
             var input = Uri.EscapeDataString($"{{\"json\":{{\"id\":{imageId}}}}}");
             var url = $"https://civitai.com/api/trpc/image.getGenerationData?input={input}";
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            // Civitai rejects this tRPC endpoint with 401 ("Please use the public API instead")
-            // unless the request looks like it came from the website: a real browser User-Agent plus
-            // matching Referer/Origin. This is the same origin check the civitai.red scraper fix
-            // addressed. Cookies are NOT required for public images.
-            request.Headers.TryAddWithoutValidation("User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36");
-            request.Headers.TryAddWithoutValidation("Accept", "application/json");
-            request.Headers.TryAddWithoutValidation("Referer", "https://civitai.com/");
-            request.Headers.TryAddWithoutValidation("Origin", "https://civitai.com");
+            HttpRequestMessage BuildRequest(bool withBearer)
+            {
+                var req = new HttpRequestMessage(HttpMethod.Get, url);
+                // Civitai rejects this tRPC endpoint with 401 ("Please use the public API instead")
+                // unless the request looks like it came from the website: a real browser User-Agent plus
+                // matching Referer/Origin. This is the same origin check the civitai.red scraper fix
+                // addressed. Cookies are NOT required for public images.
+                req.Headers.TryAddWithoutValidation("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36");
+                req.Headers.TryAddWithoutValidation("Accept", "application/json");
+                req.Headers.TryAddWithoutValidation("Referer", "https://civitai.com/");
+                req.Headers.TryAddWithoutValidation("Origin", "https://civitai.com");
+                if (withBearer && _apiKey != null)
+                {
+                    req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+                }
+                return req;
+            }
 
+            using var request = BuildRequest(withBearer: true);
             var response = await _httpClient.SendAsync(request, token);
+
+            // If the key was rejected here, fall back once to the anonymous
+            // spoofed-headers request, which works for public images.
+            if (_apiKey != null &&
+                (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                 response.StatusCode == System.Net.HttpStatusCode.Forbidden))
+            {
+                using var anonymousRequest = BuildRequest(withBearer: false);
+                response = await _httpClient.SendAsync(anonymousRequest, token);
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 var snippet = await SafeReadSnippetAsync(response, token);
@@ -249,43 +274,23 @@ public class CivitaiClient : IDisposable
         T? results = null;
         try
         {
-            var response = await client.GetAsync(url, token);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (_apiKey != null)
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+            }
+
+            var response = await client.SendAsync(request, token);
 
             if (response.IsSuccessStatusCode)
             {
-                //var options = new JsonSerializerOptions
-                //{
-                //    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                //    Converters =
-                //    {
-                //        new JsonStringEnumConverter()
-                //    }
-                //};
-
                 var options = new JsonSerializerOptions();
                 options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
                 options.Converters.Add(new JsonStringEnumConverterWithAttributeSupport());
 
                 using (var responseStream = await response.Content.ReadAsStreamAsync(token))
                 {
-                    //results = await JsonSerializer.DeserializeAsync<T>(responseStream, options);
-
-                    using var buffer = new MemoryStream();
-                    await responseStream.CopyToAsync(buffer);
-                    responseStream.Flush();
-                    responseStream.Close();
-
-                    buffer.Position = 0;
-                    using var fs = new FileStream($"civitai-{DateTime.Now:yyyyMMddhhmmss}.json", FileMode.Create, FileAccess.Write);
-                    await buffer.CopyToAsync(fs);
-                    fs.Flush();
-                    fs.Close();
-
-                    buffer.Position = 0;
-                    results = await JsonSerializer.DeserializeAsync<T>(buffer, options);
-
-                    buffer.Close();
-
+                    results = await JsonSerializer.DeserializeAsync<T>(responseStream, options);
                 }
             }
             else

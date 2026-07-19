@@ -1,10 +1,13 @@
 """
-CivitAI API client with cookie-based authentication.
-Extracts cookies from Chrome to access NSFW content without paid membership.
+CivitAI API client with API-key (Bearer) authentication and cookie fallback.
+An official API key is preferred wherever CivitAI accepts it; browser cookies
+remain the fallback for endpoints that require a session (and when no key is
+configured, behavior is identical to the original cookie-only client).
 """
 
 import json
 import logging
+import os
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import time
@@ -32,11 +35,24 @@ class CivitAIClient:
         self.page_size = config['api']['page_size']
         self.max_pages_per_collection = config['api'].get('max_pages_per_collection', 0)
 
+        # API key: env var wins (set by Diffusion Toolkit at launch), then
+        # config.yaml. Never log the value.
+        self.api_key = (os.environ.get('CIVITAI_API_KEY')
+                        or config['api'].get('api_key') or '').strip()
+        # Per-endpoint-family memo: family -> True/False once Bearer has been
+        # observed to work/fail. Families: 'trpc', 'rest'.
+        self._bearer_ok: Dict[str, bool] = {}
+        self._cookies_loaded = False
+
         # Setup session with retries
         self.session = self._create_session()
 
-        # Load cookies from browser
-        self._load_cookies()
+        if self.api_key:
+            logger.info("API key configured; cookies will be used only as fallback")
+        else:
+            logger.info("No API key; using cookie authentication")
+            # No key: load cookies eagerly, exactly like the original client.
+            self._ensure_cookies()
 
     def _create_session(self) -> requests.Session:
         """Create a session with retry logic."""
@@ -100,6 +116,37 @@ class CivitAIClient:
 
         matches = sorted(script_dir.glob('civitai*_cookies.txt'))
         return matches[0] if matches else None
+
+    def _ensure_cookies(self):
+        """Load cookies once, on first need.
+
+        Lazy on purpose: when an API key is configured, the first Bearer
+        attempt must go out cookie-free, otherwise a success could actually be
+        cookie-authenticated and we would wrongly memoize "Bearer works".
+        """
+        if not self._cookies_loaded:
+            self._cookies_loaded = True
+            self._load_cookies()
+
+    def _auth_get(self, url: str, family: str = 'trpc', **kwargs) -> requests.Response:
+        """GET with Bearer auth when available, falling back to cookies on 401/403.
+
+        The single decision point for authentication. `family` groups endpoints
+        ('trpc' or 'rest') so a rejection is memoized per family and costs at
+        most one wasted request per run.
+        """
+        if self.api_key and self._bearer_ok.get(family) is not False:
+            headers = dict(kwargs.pop('headers', {}) or {})
+            headers['Authorization'] = f'Bearer {self.api_key}'
+            response = self.session.get(url, headers=headers, **kwargs)
+            if response.status_code not in (401, 403):
+                self._bearer_ok[family] = True
+                return response
+            logger.info(f"Bearer token not accepted for {family} endpoint "
+                        f"(HTTP {response.status_code}); falling back to cookies")
+            self._bearer_ok[family] = False
+        self._ensure_cookies()
+        return self.session.get(url, **kwargs)
 
     def _load_cookies(self):
         """Load cookies from file or Chrome browser."""
@@ -210,24 +257,61 @@ class CivitAIClient:
             logger.error(f"Failed to load cookies: {e}")
             logger.warning("Continuing without authentication - NSFW content may not be accessible")
 
-    def test_authentication(self) -> bool:
-        """Test if our cookies form a valid authenticated session.
+    def test_api_key(self) -> Optional[str]:
+        """Validate the configured API key against REST /v1/users/me.
 
-        Uses the tRPC endpoint the scraper actually relies on (cookie-based
-        session auth), NOT the REST /v1/users/me endpoint - that one expects an
-        API-key Bearer token and returns 401 for cookie sessions, which made this
-        check report failure even with perfectly valid cookies.
+        This endpoint expects a Bearer token (it 401s for cookie sessions), so
+        it validates the key itself independently of tRPC acceptance.
+        Returns the username on success, None on failure or when no key is set.
         """
+        if not self.api_key:
+            return None
+        # Validate at most once per run (cmd_test_auth and test_authentication
+        # may both call this).
+        if hasattr(self, '_api_key_user'):
+            return self._api_key_user
+        self._api_key_user = None
+        try:
+            response = self.session.get(
+                f"{self.api_base}/v1/users/me",
+                headers={'Authorization': f'Bearer {self.api_key}'},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                username = data.get('username') or data.get('user', {}).get('username')
+                logger.info(f"API key valid (user: {username})")
+                self._api_key_user = username or 'unknown'
+                return self._api_key_user
+            logger.warning(f"/v1/users/me rejected the API key (HTTP {response.status_code}) - "
+                           "on granular-scope keys this endpoint needs the Profile Read "
+                           "scope; the key may still work elsewhere")
+            return None
+        except Exception as e:
+            logger.error(f"API key validation failed: {e}")
+            return None
+
+    def test_authentication(self) -> bool:
+        """Test the authentication path the scraper actually uses.
+
+        First validates the API key (if configured) against REST /v1/users/me,
+        then exercises the tRPC endpoint the scraper relies on via _auth_get,
+        which includes the Bearer-then-cookies fallback. Returns True if the
+        tRPC path works by either mechanism.
+        """
+        self.test_api_key()
         try:
             trpc_input = {"json": {"limit": 1, "sort": "Newest"}}
             params = {"input": json.dumps(trpc_input, separators=(',', ':'))}
-            response = self.session.get(
+            response = self._auth_get(
                 f"{self.trpc_url}/collection.getAllUser",
+                family='trpc',
                 params=params,
                 timeout=10,
             )
             if response.status_code == 200:
-                logger.info("Authenticated: cookies accepted by tRPC API")
+                mechanism = "API key" if self._bearer_ok.get('trpc') else "cookies"
+                logger.info(f"Authenticated: tRPC API accepted {mechanism}")
                 return True
             elif response.status_code == 401:
                 logger.warning("Not authenticated (401) - cookies missing/expired, "
@@ -329,7 +413,7 @@ class CivitAIClient:
             logger.debug(f"Requesting collection ID: {collection_id}")
             logger.debug(f"Full URL: {url}?input={params['input'][:200]}...")
 
-            response = self.session.get(url, params=params, timeout=30)
+            response = self._auth_get(url, family='trpc', params=params, timeout=30)
             response.raise_for_status()
 
             data = response.json()
@@ -381,7 +465,7 @@ class CivitAIClient:
         try:
             # First, try to get collection metadata
             url = f"{self.api_base}/v1/collections/{collection_id}"
-            response = self.session.get(url, timeout=10)
+            response = self._auth_get(url, family='rest', timeout=10)
 
             if response.status_code == 200:
                 data = response.json()
@@ -422,10 +506,11 @@ class CivitAIClient:
             }
 
             url = f"{self.trpc_url}/collection.getAllUser"
-            resp = self.session.get(url, params=params, timeout=15)
+            resp = self._auth_get(url, family='trpc', params=params, timeout=15)
 
             if resp.status_code == 401:
-                raise PermissionError("Authentication failed (401). Your CivitAI cookies are expired. Please re-export them.")
+                raise PermissionError("Authentication failed (401). Set a CivitAI API key "
+                                      "(Settings > CivitAI in Diffusion Toolkit) or re-export your cookies.")
 
             if resp.status_code != 200:
                 raise ConnectionError(f"Failed to fetch collections (HTTP {resp.status_code})")
@@ -504,7 +589,10 @@ class CivitAIClient:
 
             logger.debug(f"Downloading from: {download_url}")
 
-            # Stream the download
+            # Stream the download. Deliberately NOT via _auth_get: never send
+            # the Bearer token to the CDN host. Cookies keep NSFW originals
+            # working exactly as before.
+            self._ensure_cookies()
             response = self.session.get(download_url, stream=True, timeout=60)
             response.raise_for_status()
 

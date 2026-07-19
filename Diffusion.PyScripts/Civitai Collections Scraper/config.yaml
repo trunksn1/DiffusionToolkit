@@ -35,6 +35,11 @@ download:
 
 # CivitAI API settings
 api:
+  # Official CivitAI API key (generate at civitai.com -> Account Settings -> API Keys).
+  # Prefer the CIVITAI_API_KEY environment variable (set automatically by
+  # Diffusion Toolkit); leave this empty in the repo copy - config.yaml is
+  # tracked by git and a key pasted here would be committed.
+  api_key: ""
   # Base URL for image downloads
   image_base_url: "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/"
   # API base URL

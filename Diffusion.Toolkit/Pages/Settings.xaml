@@ -249,6 +249,15 @@
                         <Label Content="CivitAI Scraper Settings" FontWeight="Bold" FontSize="14"></Label>
 
                         <StackPanel Orientation="Vertical" Margin="0,10,0,0">
+                            <Label Content="CivitAI API Key:"></Label>
+                            <PasswordBox x:Name="CivitaiApiKeyBox"
+                                         Height="26"
+                                         Margin="0,5,0,5"
+                                         VerticalContentAlignment="Center"
+                                         PasswordChanged="CivitaiApiKeyBox_PasswordChanged"/>
+                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,15" TextWrapping="Wrap"
+                                       Text="Generate at civitai.com &#x2192; Account Settings &#x2192; API Keys. Stored encrypted (Windows DPAPI). Cookies remain the fallback; leave empty to use cookies only."></TextBlock>
+
                             <Label Content="Civitai Pipeline Repository Path:"></Label>
                             <Grid Margin="0,5,0,10">
                                 <Grid.ColumnDefinitions>

@@ -282,6 +282,13 @@ public class SettingsModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    // Plaintext only in memory; persisted DPAPI-encrypted via Settings.SetCivitaiApiKey.
+    public string? CivitaiApiKey
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public ObservableCollection<CivitaiCollectionModel> CivitaiCollections
     {
         get;

@@ -68,14 +68,51 @@ collections:
 
 ### 3. Authentication Setup
 
-**One-time setup:**
+Authentication is tried in this order: **API key first** (where CivitAI accepts
+it), then **cookies as automatic fallback**. With no API key configured, the
+script behaves exactly as before (cookies only).
+
+**Preferred: API key**
+
+1. Generate a key at civitai.com -> Account Settings -> API Keys
+2. Provide it one of two ways:
+   - Environment variable (recommended; Diffusion Toolkit sets this
+     automatically when it launches the scraper):
+     ```
+     set CIVITAI_API_KEY=<your key>
+     ```
+   - Or `api.api_key` in `config.yaml` — but **beware**: config.yaml is tracked
+     by git, a key pasted there can end up committed. Prefer the env var.
+
+The key is account-scoped (no permission selection) and never printed or logged
+by the scraper. If Bearer auth is rejected by an endpoint (HTTP 401/403), the
+scraper logs "falling back to cookies" and continues with cookie auth — the
+rejection is remembered per endpoint family, so it costs at most one extra
+request per run.
+
+**Fallback: cookies**
+
 1. Open Chrome
 2. Go to civitai.com
 3. Log in via Discord
 4. Enable NSFW content in settings
 5. Close Chrome
 
-**That's it!** The script extracts cookies automatically.
+The script extracts cookies automatically (or reads a `civitai*_cookies.txt`
+export placed in this folder).
+
+**Which endpoints accept the API key?** Run the probe script once to find out
+empirically (results depend on CivitAI's current behavior, especially on
+civitai.red and the internal tRPC endpoints):
+
+```
+set CIVITAI_API_KEY=<your key>
+.venv\Scripts\python.exe probe_auth.py            # read-only probes
+.venv\Scripts\python.exe probe_auth.py --posting  # also probes draft posting (creates + deletes a private draft)
+```
+
+Note: image CDN downloads never send the API key (only cookies), so the token
+is never exposed to the image host.
 
 ### 4. Run
 

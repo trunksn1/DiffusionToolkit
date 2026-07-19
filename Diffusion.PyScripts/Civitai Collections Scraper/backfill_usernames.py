@@ -64,13 +64,17 @@ def update_username(db_path: str, civitai_id: int, username: str):
     conn.close()
 
 
-def fetch_image_username(session: requests.Session, trpc_url: str, image_id: int) -> str | None:
-    """Fetch username for a single image from the CivitAI tRPC API."""
+def fetch_image_username(client, image_id: int) -> str | None:
+    """Fetch username for a single image from the CivitAI tRPC API.
+
+    Takes the CivitAIClient so the request goes through _auth_get and
+    inherits Bearer-with-cookie-fallback authentication.
+    """
     import json
     try:
         trpc_input = json.dumps({'json': {'id': image_id}}, separators=(',', ':'))
-        url = f"{trpc_url}/image.get"
-        response = session.get(url, params={'input': trpc_input}, timeout=15)
+        url = f"{client.trpc_url}/image.get"
+        response = client._auth_get(url, family='trpc', params={'input': trpc_input}, timeout=15)
 
         if response.status_code == 404:
             return None
@@ -125,7 +129,7 @@ def main():
     failed = 0
 
     for i, cid in enumerate(ids):
-        username = fetch_image_username(client.session, config['api']['trpc_url'], cid)
+        username = fetch_image_username(client, cid)
 
         if username:
             update_username(db_path, cid, username)

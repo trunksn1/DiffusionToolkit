@@ -408,9 +408,19 @@ limits:
 - Image downloads: Direct URLs from API response
 
 **Authentication:**
-- Uses Chrome browser cookies (session-based)
-- Cookie file: `civitai.com_cookies.txt`
-- Fallback: Chrome profile at `./Profilo Pezzotto`
+- Preferred: official API key (Bearer token), stored DPAPI-encrypted in C# settings
+  (`Settings.CivitaiApiKeyProtected`, accessed via `GetCivitaiApiKey()`/`SetCivitaiApiKey()`)
+  and passed to Python via the `CIVITAI_API_KEY` environment variable — NEVER on the
+  command line (Arguments are logged to DiffusionToolkit.log)
+- Python tries Bearer first per endpoint family ('trpc'/'rest') and falls back to
+  cookies on 401/403 (see `CivitAIClient._auth_get` in api_client.py); with no key,
+  behavior is cookie-only as before
+- Cookie fallback: `civitai*_cookies.txt` files, then Chrome browser cookies
+- CDN image downloads never send the Bearer token (cookies only)
+- `probe_auth.py` (standalone) empirically tests which endpoints accept Bearer
+- NOTE: `LaunchCivitaiScraper` uses `UseShellExecute = false` — required to pass
+  environment variables; the Python console window still appears because
+  `CreateNoWindow = false` and python.exe is a console app
 
 **Rate Limiting:**
 - API has rate limits (exact limits unknown)

@@ -58,7 +58,7 @@ public class CivitaiImageService
         string? fetchError = null;
         try
         {
-            using var client = new CivitaiClient();
+            using var client = new CivitaiClient(ServiceLocator.Settings?.GetCivitaiApiKey());
             data = await client.FetchImageGenerationDataAsync(imageId, CancellationToken.None);
             fetchError = client.LastError;
         }

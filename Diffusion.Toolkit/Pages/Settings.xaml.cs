@@ -111,6 +111,8 @@ namespace Diffusion.Toolkit.Pages
             // Civitai settings
             _model.CivitaiAlwaysPromptForAlbum = _settings.CivitaiAlwaysPromptForAlbum;
             _model.CivitaiMaxPagesPerCollection = _settings.CivitaiMaxPagesPerCollection;
+            _model.CivitaiApiKey = _settings.GetCivitaiApiKey();
+            CivitaiApiKeyBox.Password = _model.CivitaiApiKey ?? "";
             LoadCivitaiAlbumDropdown();
             LoadCivitaiCollections();
 
@@ -427,6 +429,7 @@ namespace Diffusion.Toolkit.Pages
                 // Civitai settings
                 _settings.CivitaiAlwaysPromptForAlbum = _model.CivitaiAlwaysPromptForAlbum;
                 _settings.CivitaiMaxPagesPerCollection = _model.CivitaiMaxPagesPerCollection;
+                _settings.SetCivitaiApiKey(_model.CivitaiApiKey);
                 // CivitaiDefaultAlbum is saved when the user selects from dropdown or clicks Clear
 
                 // Save CivitAI collections
@@ -486,6 +489,12 @@ namespace Diffusion.Toolkit.Pages
         {
             _settings.CivitaiDefaultAlbum = null;
             CivitaiDefaultAlbumComboBox.SelectedIndex = 0; // Select "None"
+        }
+
+        private void CivitaiApiKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            // PasswordBox has no binding support; sync to the model manually.
+            _model.CivitaiApiKey = CivitaiApiKeyBox.Password;
         }
 
         private void BrowseCivitaiPipelinePath_OnClick(object sender, RoutedEventArgs e)
@@ -582,6 +591,13 @@ namespace Diffusion.Toolkit.Pages
                         StandardOutputEncoding = Encoding.UTF8
                     };
 
+                    // API key via environment only - never on the command line (logged).
+                    var civitaiApiKey = _settings.GetCivitaiApiKey();
+                    if (!string.IsNullOrWhiteSpace(civitaiApiKey))
+                    {
+                        processInfo.EnvironmentVariables["CIVITAI_API_KEY"] = civitaiApiKey;
+                    }
+
                     using var process = Process.Start(processInfo);
                     if (process == null) return null;
 
@@ -617,7 +633,10 @@ namespace Diffusion.Toolkit.Pages
                     if (errorType == "auth")
                     {
                         MessageBox.Show(_window,
-                            "Your CivitAI cookies have expired.\n\nTo fix this:\n" +
+                            "CivitAI authentication failed.\n\n" +
+                            "Preferred fix: enter a CivitAI API key in the field above\n" +
+                            "(generate one at civitai.com > Account Settings > API Keys).\n\n" +
+                            "Alternatively, refresh your cookies:\n" +
                             "1. Open Chrome and log into civitai.com\n" +
                             "2. Export cookies using 'Get cookies.txt LOCALLY' extension\n" +
                             "3. Save the cookies file in the Civitai Collections Scraper folder\n" +

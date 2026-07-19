@@ -499,6 +499,18 @@ public class Settings : SettingsContainer, IScanOptions
         set => UpdateValue(ref field, value);
     } = 5; // Default: check first 5 pages (~500 images)
 
+    // DPAPI-encrypted (CurrentUser) base64 ciphertext of the CivitAI API key.
+    // Plaintext never touches settings.json; use GetCivitaiApiKey/SetCivitaiApiKey.
+    public string? CivitaiApiKeyProtected
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
+
+    public string? GetCivitaiApiKey() => Common.ProtectedString.Unprotect(CivitaiApiKeyProtected);
+
+    public void SetCivitaiApiKey(string? apiKey) => CivitaiApiKeyProtected = Common.ProtectedString.Protect(apiKey?.Trim());
+
     public List<CivitaiCollectionConfig> CivitaiCollections
     {
         get;
