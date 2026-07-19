@@ -859,6 +859,7 @@ namespace Diffusion.Toolkit
             };
 
             _prompts = new Prompts();
+            _civitaiCalendar = new CivitaiCalendar();
             _settingsPage = new Pages.Settings(this);
 
 
@@ -895,6 +896,7 @@ namespace Diffusion.Toolkit
                     "search" => "Diffusions",
                     "models" => "Models",
                     "prompts" => "Prompts",
+                    "calendar" => "Calendar",
                     "settings" => "Settings",
                     _ => _model.ActiveView
                 };
@@ -1125,6 +1127,7 @@ namespace Diffusion.Toolkit
 
         private ICollection<Model> _modelsCollection;
         private Prompts _prompts;
+        private CivitaiCalendar _civitaiCalendar;
 
         private void LoadSmartAlbums()
         {
@@ -1468,9 +1471,21 @@ namespace Diffusion.Toolkit
                     FileName = pythonPath,
                     Arguments = $"main.py --db-path \"{civitaiDbPath}\" --max-pages {_settings.CivitaiMaxPagesPerCollection}{collectionsArg} sync",
                     WorkingDirectory = scriptsBasePath,
-                    UseShellExecute = true,  // Show console window
+                    // Must be false so EnvironmentVariables is honored; the console
+                    // window still appears (python.exe is a console app and
+                    // CreateNoWindow is false).
+                    UseShellExecute = false,
                     CreateNoWindow = false
                 };
+
+                // Pass the API key via environment variable only - never on the
+                // command line, which is written to DiffusionToolkit.log.
+                var civitaiApiKey = _settings.GetCivitaiApiKey();
+                if (!string.IsNullOrWhiteSpace(civitaiApiKey))
+                {
+                    processInfo.EnvironmentVariables["CIVITAI_API_KEY"] = civitaiApiKey;
+                }
+                Logger.Log($"LaunchCivitaiScraper: API key passed via environment: {(!string.IsNullOrWhiteSpace(civitaiApiKey) ? "yes" : "no")}");
 
                 Logger.Log("LaunchCivitaiScraper: Starting Python process...");
                 var process = Process.Start(processInfo);
@@ -1495,18 +1510,20 @@ namespace Diffusion.Toolkit
                 // Check for suspected auth failure (exit code 2 = all collections returned 0 images from API)
                 if (process.ExitCode == 2)
                 {
-                    Logger.Log("LaunchCivitaiScraper: WARNING - No images found in any collection (exit code 2) - cookies likely expired");
+                    Logger.Log("LaunchCivitaiScraper: WARNING - No images found in any collection (exit code 2) - authentication likely failed");
                     var cookiePath = System.IO.Path.Combine(scriptsBasePath, "civitai.com_cookies.txt");
                     MessageBox.Show(this,
                         "No images were found in any collection.\n\n" +
-                        "This almost always means your CivitAI session cookies have expired.\n\n" +
-                        "To fix this:\n" +
+                        "This almost always means authentication failed.\n\n" +
+                        "Preferred fix: set a CivitAI API key in Settings > CivitAI\n" +
+                        "(generate one at civitai.com > Account Settings > API Keys).\n\n" +
+                        "Alternatively, refresh your cookies:\n" +
                         "1. Open Chrome and log into civitai.com\n" +
                         "2. Install the \"Get cookies.txt LOCALLY\" extension\n" +
                         "3. Export cookies for civitai.com in Netscape format\n" +
                         $"4. Save as:\n   {cookiePath}\n\n" +
                         "Then try again.",
-                        "CivitAI: No Images Found (Cookies Expired?)",
+                        "CivitAI: No Images Found (Authentication Failed?)",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                     return;

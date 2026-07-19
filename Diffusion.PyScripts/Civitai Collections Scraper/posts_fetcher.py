@@ -1,0 +1,571 @@
+"""
+Fetches the user's own CivitAI posts (published + scheduled) into a JSON cache
+for the Diffusion Toolkit "CivitAI Posts Calendar", and schedules new posts.
+
+All network calls go through CivitAIClient (Bearer-first with cookie fallback
+for reads; cookie session for write mutations). Endpoint shapes for scheduled
+posts and uploads are validated by probe_posts.py; parsing here is defensive
+so shape drift degrades to warnings instead of crashes.
+
+Cache file (atomic write): %APPDATA%/DiffusionToolkit/Civitai/posts_cache.json
+"""
+
+import datetime
+import json
+import logging
+import os
+import struct
+import sys
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+CACHE_VERSION = 1
+PAGE_DELAY_SECONDS = 0.5
+INCREMENTAL_OVERLAP_DAYS = 7
+# Hard ceiling per section scan. 400 pages x 50 = 20k posts - far beyond any
+# real account, but finite if the endpoint misbehaves (bad cursor, ignored
+# filters). Without this a bad response shape means an infinite loop.
+MAX_PAGES_PER_SECTION = 400
+# Queued-post detection, verified live 2026-07-19:
+# - post.getInfinite section="draft" is BROKEN server-side: it returns the real
+#   pending posts first, then keeps paginating into the user's entire published
+#   history (the civitai website's draft section shows the same wrong listing).
+# - post.getEdit's wasPublished is False even for posts that are publicly
+#   visible - useless as a signal.
+# - The only reliable ground truth: what an ANONYMOUS request can see of the
+#   user's feed is published; anything the authenticated fetch returns beyond
+#   that is the pending queue. queued = authenticated ids - anonymous ids.
+
+
+def default_cache_path() -> Path:
+    appdata = os.environ.get("APPDATA") or str(Path.home())
+    return Path(appdata) / "DiffusionToolkit" / "Civitai" / "posts_cache.json"
+
+
+def _parse_iso(value: Optional[str]) -> Optional[datetime.datetime]:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt.astimezone(datetime.timezone.utc)
+    except ValueError:
+        return None
+
+
+def _trpc_query(client, procedure: str, input_json: Dict[str, Any], timeout=30):
+    params = {"input": json.dumps({"json": input_json}, separators=(",", ":"))}
+    return client._auth_get(f"{client.trpc_url}/{procedure}", family="trpc",
+                            params=params, timeout=timeout)
+
+
+def _trpc_mutate(client, procedure: str, input_json: Dict[str, Any], timeout=30):
+    """Write mutations use the cookie session (write-tRPC generally requires it)."""
+    client._ensure_cookies()
+    return client.session.post(f"{client.trpc_url}/{procedure}",
+                               json={"json": input_json}, timeout=timeout)
+
+
+def _trpc_json(resp) -> Any:
+    try:
+        return resp.json().get("result", {}).get("data", {}).get("json")
+    except Exception:
+        return None
+
+
+def _resolve_username(client, explicit: Optional[str]) -> str:
+    """The username is MANDATORY: post.getInfinite without a username filter is
+    the sitewide community feed - paging it looks like a hang and pollutes the
+    cache with other people's posts. Better to fail loudly than fetch the world.
+
+    Resolution order: explicit > REST /v1/users/me (needs the Profile scope on
+    granular API keys) > NextAuth /api/auth/session (accepts Bearer regardless
+    of scopes, and cookie sessions too - verified live 2026-07-19).
+    """
+    if explicit:
+        return explicit
+
+    username = client.test_api_key()
+    if username and username != "unknown":
+        return username
+
+    try:
+        base = client.api_base.rsplit("/api", 1)[0]
+        resp = client._auth_get(f"{base}/api/auth/session", family="rest", timeout=15)
+        if resp.status_code == 200:
+            user = (resp.json() or {}).get("user") or {}
+            name = user.get("username")
+            if name:
+                logger.info(f"Resolved username via session endpoint: {name}")
+                return name
+    except Exception as e:
+        logger.debug(f"Session endpoint username resolution failed: {e}")
+
+    raise RuntimeError(
+        "Could not determine your CivitAI username. Set a valid CivitAI API key "
+        "in Settings > CivitAI (recommended), or add your username under "
+        "'posts: username:' in config.yaml.")
+
+
+def _extract_post_images(client, post: Dict[str, Any], warnings: List[str]) -> List[Dict[str, Any]]:
+    """Images from the post item itself, else a per-post image.getInfinite call."""
+    raw = post.get("images")
+    items: List[Dict[str, Any]] = []
+    if isinstance(raw, list) and raw and isinstance(raw[0], dict):
+        items = raw
+    else:
+        post_id = post.get("id")
+        if post_id is None:
+            return []
+        try:
+            resp = _trpc_query(client, "image.getInfinite",
+                               {"postId": post_id, "pending": True, "limit": 100, "authed": True})
+            data = _trpc_json(resp) or {}
+            items = data.get("items", []) if isinstance(data, dict) else []
+            time.sleep(PAGE_DELAY_SECONDS)
+        except Exception as e:
+            warnings.append(f"images fetch failed for post {post_id}: {e}")
+            return []
+
+    images = []
+    for img in items:
+        if not isinstance(img, dict) or img.get("id") is None:
+            continue
+        images.append({
+            "id": img["id"],
+            "name": img.get("name"),
+            "url": img.get("url"),
+            "width": img.get("width"),
+            "height": img.get("height"),
+            "nsfwLevel": img.get("nsfwLevel"),
+        })
+    return images
+
+
+def _emit(progress, msg: str):
+    """Send a human-readable progress line to the caller (C#), if one is listening."""
+    if callable(progress):
+        try:
+            progress(msg)
+        except Exception:
+            pass
+    logger.info(msg)
+
+
+def _fetch_posts_pages(client, username: str, section: Optional[str],
+                       stop_before: Optional[datetime.datetime],
+                       warnings: List[str], progress=None,
+                       seen_ids: Optional[set] = None) -> List[Dict[str, Any]]:
+    """Cursor-page post.getInfinite; stops once a page is entirely older than stop_before.
+
+    seen_ids is shared across section passes: if a whole page yields nothing new,
+    this section is just replaying the same feed (server ignored the filter) and
+    we bail out instead of re-paging the entire history per section.
+    """
+    posts: List[Dict[str, Any]] = []
+    cursor = None
+    pages = 0
+    label = section or "all posts"
+    while True:
+        input_json: Dict[str, Any] = {"period": "AllTime", "sort": "Newest",
+                                      "limit": 50, "authed": True,
+                                      "username": username}
+        if section:
+            input_json["section"] = section
+        if cursor is not None:
+            input_json["cursor"] = cursor
+
+        resp = _trpc_query(client, "post.getInfinite", input_json)
+        if resp.status_code != 200:
+            # Unknown sections and auth problems both land here; callers decide
+            # severity. 401 on the baseline (no section) is a real auth failure.
+            if section:
+                logger.debug(f"post.getInfinite section={section} -> HTTP {resp.status_code}")
+                return posts
+            if resp.status_code == 401:
+                raise PermissionError("Authentication failed (401) fetching posts. "
+                                      "Set a CivitAI API key or refresh your cookies.")
+            warnings.append(f"post.getInfinite HTTP {resp.status_code}")
+            return posts
+
+        data = _trpc_json(resp) or {}
+        items = data.get("items", []) if isinstance(data, dict) else []
+        next_cursor = data.get("nextCursor") if isinstance(data, dict) else None
+        if not items:
+            return posts
+
+        page_dates = []
+        new_on_page = 0
+        for post in items:
+            if not isinstance(post, dict) or post.get("id") is None:
+                continue
+            # Own-posts guard: if the item carries an owner and it isn't us,
+            # the server ignored the username filter - skip, never cache.
+            owner = (post.get("user") or {}).get("username")
+            if owner and owner.lower() != username.lower():
+                continue
+            if seen_ids is not None:
+                if post["id"] in seen_ids:
+                    continue
+                seen_ids.add(post["id"])
+            new_on_page += 1
+            posts.append(post)
+            dt = _parse_iso(post.get("publishedAt"))
+            if dt:
+                page_dates.append(dt)
+
+        pages += 1
+        _emit(progress, f"Scanning {label}: page {pages} ({len(posts)} posts)…")
+
+        if section and new_on_page == 0:
+            # Newest-first: anything new (incl. scheduled) would be on page 1.
+            logger.info(f"  section={section}: nothing new, skipping")
+            return posts
+        if stop_before and page_dates and max(page_dates) < stop_before:
+            logger.info(f"  section={label}: stopped after {pages} pages "
+                        f"(reached posts older than {stop_before.date()})")
+            return posts
+        if not next_cursor or next_cursor == cursor:
+            return posts
+        if pages >= MAX_PAGES_PER_SECTION:
+            warnings.append(f"section {label}: hit the {MAX_PAGES_PER_SECTION}-page "
+                            "safety cap; results may be incomplete")
+            return posts
+        cursor = next_cursor
+        time.sleep(PAGE_DELAY_SECONDS)
+
+
+def _fetch_public_ids(client, username: str,
+                      stop_before: Optional[datetime.datetime],
+                      warnings: List[str], progress=None) -> Optional[set]:
+    """Ids of the user's posts visible WITHOUT authentication (= published).
+
+    Uses a fresh session with no cookies and no Bearer token, so the server
+    treats us as an anonymous visitor. browsingLevel=31 requests all NSFW
+    tiers so published NSFW posts are not misread as queued. Returns None
+    when the public feed cannot be fetched - callers must then flag nothing.
+    """
+    import requests
+
+    host = client._api_host()
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Referer': f'https://{host}/',
+        'Origin': f'https://{host}',
+    })
+
+    ids: set = set()
+    cursor = None
+    pages = 0
+    try:
+        while True:
+            input_json: Dict[str, Any] = {"username": username, "period": "AllTime",
+                                          "sort": "Newest", "limit": 50,
+                                          "browsingLevel": 31}
+            if cursor is not None:
+                input_json["cursor"] = cursor
+            params = {"input": json.dumps({"json": input_json}, separators=(",", ":"))}
+            resp = session.get(f"{client.trpc_url}/post.getInfinite",
+                               params=params, timeout=30)
+            if resp.status_code != 200:
+                warnings.append(f"public feed HTTP {resp.status_code}; "
+                                "queued detection skipped this run")
+                return None
+
+            data = resp.json().get("result", {}).get("data", {}).get("json") or {}
+            items = data.get("items", []) if isinstance(data, dict) else []
+            next_cursor = data.get("nextCursor") if isinstance(data, dict) else None
+            if not items:
+                return ids
+
+            page_dates = []
+            for post in items:
+                if isinstance(post, dict) and post.get("id") is not None:
+                    ids.add(post["id"])
+                    dt = _parse_iso(post.get("publishedAt"))
+                    if dt:
+                        page_dates.append(dt)
+
+            pages += 1
+            _emit(progress, f"Checking public visibility: page {pages}…")
+
+            if stop_before and page_dates and max(page_dates) < stop_before:
+                return ids
+            if not next_cursor or next_cursor == cursor:
+                return ids
+            if pages >= MAX_PAGES_PER_SECTION:
+                warnings.append("public feed: hit the page safety cap")
+                return ids
+            cursor = next_cursor
+            time.sleep(PAGE_DELAY_SECONDS)
+    except Exception as e:
+        warnings.append(f"public feed fetch failed: {e}; "
+                        "queued detection skipped this run")
+        return None
+
+
+def fetch_posts(client, config: dict, username: Optional[str],
+                range_from: datetime.date, range_to: datetime.date,
+                existing_cache: Optional[dict], progress=None) -> dict:
+    """Build the cache dict. Incremental when existing_cache is provided."""
+    warnings: List[str] = []
+    _emit(progress, "Signing in to CivitAI…")
+    username = _resolve_username(client, username)  # raises if unknown - never fetch the world
+
+    # Incremental boundary: keep old past posts, refetch everything newer than
+    # (newest cached PAST post - overlap). Future/scheduled posts are always
+    # refetched wholesale because they can be rescheduled or deleted.
+    # range_from also bounds the scan: a "quick" fetch of the current month must
+    # not silently turn into a months-long rescan because the cache is stale.
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    range_start = datetime.datetime.combine(range_from, datetime.time.min,
+                                            tzinfo=datetime.timezone.utc)
+    stop_before = range_start
+    if existing_cache and isinstance(existing_cache.get("posts"), list):
+        past_dates = [d for d in (_parse_iso(p.get("publishedAt"))
+                                  for p in existing_cache["posts"] if isinstance(p, dict))
+                      if d and d < now_utc]
+        if past_dates:
+            boundary = max(past_dates) - datetime.timedelta(days=INCREMENTAL_OVERLAP_DAYS)
+            stop_before = max(boundary, range_start)
+
+    # Everything older than the scan window is kept as-is from the cache.
+    kept_posts: List[Dict[str, Any]] = []
+    if existing_cache and isinstance(existing_cache.get("posts"), list):
+        kept_posts = [p for p in existing_cache["posts"]
+                      if isinstance(p, dict)
+                      and (_parse_iso(p.get("publishedAt")) or now_utc) < stop_before]
+        logger.info(f"Incremental fetch: keeping {len(kept_posts)} cached posts "
+                    f"older than {stop_before.date()}")
+
+    # Single authenticated pass: the baseline feed includes both published
+    # posts and the owner's pending queue.
+    _emit(progress, f"Fetching posts for {username}…")
+    fetched: Dict[Any, Dict[str, Any]] = {}
+    seen_ids: set = set()
+    try:
+        for post in _fetch_posts_pages(client, username, None, stop_before,
+                                       warnings, progress, seen_ids):
+            fetched.setdefault(post.get("id"), post)
+    except PermissionError:
+        raise
+
+    # Anonymous pass: whatever the public cannot see is the pending queue.
+    # It always covers the FULL requested range (it is cheap - published-only,
+    # a page covers weeks), so queue flags can be re-evaluated even for posts
+    # the incremental authed pass kept from cache. On failure, flag nothing.
+    public_ids = _fetch_public_ids(client, username, range_start, warnings, progress)
+    queued_ids: set = set()
+    if public_ids is not None:
+        for pid, post in fetched.items():
+            dt = _parse_iso(post.get("publishedAt"))
+            if dt and dt >= range_start and pid not in public_ids:
+                queued_ids.add(pid)
+    if queued_ids:
+        logger.info(f"Pending queue: {len(queued_ids)} post(s) not publicly visible")
+
+    range_end = datetime.datetime.combine(range_to, datetime.time.max,
+                                          tzinfo=datetime.timezone.utc)
+    in_range = []
+    for post in fetched.values():
+        published = _parse_iso(post.get("publishedAt"))
+        if published is None:
+            # Unscheduled drafts have no date - not calendar material.
+            continue
+        # Fetched posts inside the requested range are always used (the authed
+        # pass's last page may straddle past stop_before - those stragglers are
+        # valid data, not noise). Queued posts bypass the range check entirely.
+        if post.get("id") not in queued_ids and (published < range_start
+                                                 or published > range_end):
+            continue
+        in_range.append((post, published))
+
+    new_posts: List[Dict[str, Any]] = []
+    total = len(in_range)
+    for idx, (post, published) in enumerate(in_range, start=1):
+        _emit(progress, f"Loading images for post {idx} of {total}…")
+        new_posts.append({
+            "postId": post.get("id"),
+            "publishedAt": post.get("publishedAt"),
+            # Queued = still in CivitAI's draft/scheduled section, even when the
+            # scheduled time has already passed without the post going public.
+            "scheduled": post.get("id") in queued_ids or published > now_utc,
+            "title": post.get("title"),
+            "images": _extract_post_images(client, post, warnings),
+        })
+
+    # A kept post is dropped only when this run actually produced a replacement
+    # for it - dropping on mere fetch-membership would lose posts the range
+    # filter discarded. Kept posts inside the anonymous pass's window get their
+    # queue flag re-evaluated (a queued post may have published since the last
+    # refresh, and vice versa); older kept posts keep whatever flag they had.
+    new_ids = {p.get("postId") for p in new_posts}
+    kept_posts = [p for p in kept_posts if p.get("postId") not in new_ids]
+    if public_ids is not None:
+        for p in kept_posts:
+            dt = _parse_iso(p.get("publishedAt"))
+            if dt and range_start <= dt < stop_before:
+                p["scheduled"] = p.get("postId") not in public_ids
+
+    all_posts = kept_posts + new_posts
+    all_posts.sort(key=lambda p: p.get("publishedAt") or "", reverse=True)
+
+    # A quick (scoped) fetch must not shrink the recorded history range.
+    cache_from = range_from.isoformat()
+    if existing_cache and isinstance(existing_cache.get("rangeFrom"), str):
+        cache_from = min(existing_cache["rangeFrom"], cache_from)
+
+    return {
+        "version": CACHE_VERSION,
+        "generatedAt": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "username": username,
+        "rangeFrom": cache_from,
+        "rangeTo": range_to.isoformat(),
+        "posts": all_posts,
+        "warnings": warnings,
+    }
+
+
+def write_cache_atomic(cache: dict, path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def load_cache(path: Path) -> Optional[dict]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+        return cache if isinstance(cache, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+# ---------------------------------------------------------------------------
+# schedule-post pipeline
+# ---------------------------------------------------------------------------
+
+def _image_dimensions(path: Path) -> tuple:
+    """Width/height for PNG/JPEG/WebP without external deps. (0,0) if unknown."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(32)
+            if head.startswith(b"\x89PNG\r\n\x1a\n"):
+                w, h = struct.unpack(">II", head[16:24])
+                return int(w), int(h)
+            if head.startswith(b"RIFF") and head[8:12] == b"WEBP":
+                if head[12:16] == b"VP8X":
+                    w = int.from_bytes(head[24:27], "little") + 1
+                    h = int.from_bytes(head[27:30], "little") + 1
+                    return w, h
+                return 0, 0
+            if head.startswith(b"\xff\xd8"):
+                f.seek(2)
+                while True:
+                    marker = f.read(2)
+                    if len(marker) < 2 or marker[0] != 0xFF:
+                        return 0, 0
+                    length = struct.unpack(">H", f.read(2))[0]
+                    if marker[1] in (0xC0, 0xC1, 0xC2, 0xC3):
+                        data = f.read(5)
+                        h, w = struct.unpack(">HH", data[1:5])
+                        return int(w), int(h)
+                    f.seek(length - 2, 1)
+    except Exception:
+        pass
+    return 0, 0
+
+
+def schedule_post(client, file_path: str, publish_at: str, title: Optional[str]) -> dict:
+    """Create a draft, upload the image, attach it, set publishedAt.
+
+    Returns {"status":"ok","postId":...,"publishedAt":...} or raises RuntimeError
+    with a category prefix ('auth:', 'upload:', 'schedule:').
+    """
+    path = Path(file_path)
+    if not path.is_file():
+        raise RuntimeError(f"upload: file not found: {file_path}")
+
+    publish_dt = _parse_iso(publish_at)
+    if publish_dt is None:
+        raise RuntimeError(f"schedule: invalid --publish-at value: {publish_at}")
+    publish_utc = publish_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    width, height = _image_dimensions(path)
+    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "webp": "image/webp", "gif": "image/gif"}.get(path.suffix.lower().lstrip("."),
+                                                          "application/octet-stream")
+
+    # 1. Draft post
+    resp = _trpc_mutate(client, "post.create", {"authed": True})
+    if resp.status_code == 401:
+        raise RuntimeError("auth: post.create rejected (401) - cookies expired?")
+    data = _trpc_json(resp)
+    post_id = data.get("id") if isinstance(data, dict) else None
+    if resp.status_code != 200 or post_id is None:
+        raise RuntimeError(f"upload: post.create failed (HTTP {resp.status_code})")
+    logger.info(f"Created draft post {post_id}")
+
+    try:
+        # 2. Upload handshake + PUT
+        resp = client.session.post(f"{client.api_base}/v1/image-upload",
+                                   json={"filename": path.name, "metadata": {}},
+                                   timeout=30)
+        if resp.status_code != 200:
+            raise RuntimeError(f"upload: image-upload handshake failed (HTTP {resp.status_code})")
+        body = resp.json()
+        upload_url = body.get("uploadURL") or body.get("uploadUrl") or body.get("url")
+        upload_key = body.get("id") or body.get("key")
+        if not upload_url or not upload_key:
+            raise RuntimeError(f"upload: handshake response missing url/key (keys={sorted(body.keys())})")
+
+        with open(path, "rb") as f:
+            put = client.session.put(upload_url, data=f,
+                                     headers={"Content-Type": mime}, timeout=300)
+        if put.status_code not in (200, 201, 204):
+            raise RuntimeError(f"upload: PUT failed (HTTP {put.status_code})")
+        logger.info("Uploaded image bytes")
+
+        # 3. Attach to post
+        resp = _trpc_mutate(client, "post.addImage", {
+            "postId": post_id,
+            "url": upload_key,
+            "name": path.name,
+            "width": width,
+            "height": height,
+            "index": 0,
+            "mimeType": mime,
+        })
+        if resp.status_code != 200:
+            raise RuntimeError(f"upload: post.addImage failed (HTTP {resp.status_code}): "
+                               f"{resp.text[:300]}")
+        logger.info("Attached image to post")
+
+        # 4. Title (optional) + schedule
+        update_input: Dict[str, Any] = {"id": post_id, "publishedAt": publish_utc}
+        if title:
+            update_input["title"] = title
+        resp = _trpc_mutate(client, "post.update", update_input)
+        if resp.status_code != 200:
+            raise RuntimeError(f"schedule: post.update failed (HTTP {resp.status_code}): "
+                               f"{resp.text[:300]}")
+        logger.info(f"Scheduled post {post_id} for {publish_utc}")
+
+        return {"status": "ok", "postId": post_id, "publishedAt": publish_utc}
+
+    except Exception:
+        # Roll back the draft so failed attempts don't litter the account.
+        try:
+            _trpc_mutate(client, "post.delete", {"id": post_id})
+            logger.info(f"Rolled back draft post {post_id}")
+        except Exception as cleanup_error:
+            logger.warning(f"Rollback of draft post {post_id} failed: {cleanup_error}")
+        raise

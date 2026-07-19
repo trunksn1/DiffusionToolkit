@@ -171,6 +171,11 @@ public class ServiceLocator
         get { return field ??= new CivitaiPostService(); }
     }
 
+    public static CivitaiPostsService CivitaiPostsService
+    {
+        get { return field ??= new CivitaiPostsService(); }
+    }
+
     public static TokenAnalyzerService TokenAnalyzerService
     {
         get { return field ??= new TokenAnalyzerService(); }

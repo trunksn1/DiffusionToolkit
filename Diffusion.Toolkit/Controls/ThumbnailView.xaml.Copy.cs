@@ -19,7 +19,7 @@ namespace Diffusion.Toolkit.Controls
             
             var hash = Model.CurrentImage.ModelHash;
 
-            using (var client = new CivitaiClient())
+            using (var client = new CivitaiClient(ServiceLocator.Settings?.GetCivitaiApiKey()))
             {
                 try
                 {

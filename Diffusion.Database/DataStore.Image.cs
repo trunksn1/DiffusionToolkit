@@ -594,6 +594,59 @@ namespace Diffusion.Database
             return db.Query<HashMatch>("SELECT Id, Path FROM Image WHERE Hash = ?", hash);
         }
 
+        /// <summary>
+        /// Batched lookup of images by bare filename (case-insensitive). Used by the
+        /// CivitAI Posts Calendar to match posted images (which keep their original
+        /// upload filename) back to library files. Names that get no exact hit are
+        /// retried extension-tolerantly (name without extension + any extension).
+        /// </summary>
+        public IReadOnlyCollection<ImageFileMatch> GetImagesByFileNames(IEnumerable<string> fileNames)
+        {
+            var names = fileNames.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().ToList();
+            var results = new List<ImageFileMatch>();
+            if (names.Count == 0)
+            {
+                return results;
+            }
+
+            var db = OpenReadonlyConnection();
+
+            const int chunkSize = 500;
+            foreach (var chunk in names.Chunk(chunkSize))
+            {
+                var placeholders = string.Join(",", chunk.Select(_ => "?"));
+                results.AddRange(db.Query<ImageFileMatch>(
+                    $"SELECT Id, Path, FileName, Width, Height, Hash FROM Image WHERE FileName COLLATE NOCASE IN ({placeholders})",
+                    chunk.Cast<object>().ToArray()));
+            }
+
+            // Second pass: names with no exact match may differ only by extension
+            // (CivitAI sometimes stores the name without one, or re-encodes).
+            var matched = new HashSet<string>(results.Select(r => r.FileName), StringComparer.OrdinalIgnoreCase);
+            foreach (var name in names)
+            {
+                if (matched.Contains(name))
+                {
+                    continue;
+                }
+                var stem = System.IO.Path.GetFileNameWithoutExtension(name);
+                if (string.IsNullOrEmpty(stem))
+                {
+                    continue;
+                }
+                results.AddRange(db.Query<ImageFileMatch>(
+                    "SELECT Id, Path, FileName, Width, Height, Hash FROM Image WHERE FileName LIKE ? ESCAPE '\\'",
+                    EscapeLike(stem) + ".%"));
+            }
+
+            return results;
+        }
+
+        private static string EscapeLike(string value)
+        {
+            return value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+        }
+
         public int UpdateImagePath(int id, string path)
         {
             lock (_lock)
@@ -697,5 +750,15 @@ namespace Diffusion.Database
     {
         public int Id { get; set; }
         public string Path { get; set; }
+    }
+
+    public class ImageFileMatch
+    {
+        public int Id { get; set; }
+        public string Path { get; set; }
+        public string FileName { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public string? Hash { get; set; }
     }
 }

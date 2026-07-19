@@ -171,9 +171,12 @@ def cmd_sync(args, orchestrator: DownloadOrchestrator, config: dict):
             print("\n" + "=" * 60)
             print("WARNING: No images were found in any collection!")
             print("=" * 60)
-            print("\nThis usually means your CivitAI session cookies have")
-            print("expired. You need to log into CivitAI and re-export them.")
-            print(f"\nReplace the cookies file at:")
+            print("\nThis usually means authentication failed.")
+            print("\nPreferred fix: set a CivitAI API key (generate at")
+            print("civitai.com -> Account Settings -> API Keys, then enter it")
+            print("in Diffusion Toolkit under Settings > CivitAI, or set the")
+            print("CIVITAI_API_KEY environment variable).")
+            print("\nAlternatively, re-export your session cookies and replace:")
             print(f"  {cookie_file}")
             print("\n(If your collections are genuinely empty, ignore this.)")
             print("=" * 60 + "\n")
@@ -380,16 +383,35 @@ def cmd_test_auth(args, orchestrator: DownloadOrchestrator, config: dict):
     print("\nTesting CivitAI authentication...")
     print("-" * 40)
 
+    client = orchestrator.api_client
+    if client.api_key:
+        username = client.test_api_key()
+        if username:
+            print(f"[OK] API key valid (user: {username})")
+        else:
+            print("[FAIL] API key rejected - regenerate it at")
+            print("  civitai.com -> Account Settings -> API Keys")
+    else:
+        print("[i] No API key configured (using cookies).")
+        print("  Tip: an API key is more robust than cookies - set one in")
+        print("  Diffusion Toolkit under Settings > CivitAI.")
+
     if orchestrator.test_authentication():
-        print("[OK] Authentication successful!")
+        mechanism = "API key" if client._bearer_ok.get('trpc') else "cookies"
+        print(f"[OK] Authentication successful (tRPC accepted: {mechanism})!")
         print("  You can access NSFW content.")
     else:
-        print("[FAIL] Authentication failed or cookies not found")
-        print("\nTo fix this:")
+        print("[FAIL] Authentication failed")
+        if client.api_key:
+            print("\nYour API key did not work for the collection API and no")
+            print("valid cookies were found. To fix this:")
+        else:
+            print("\nTo fix this:")
         print("  1. Open Chrome")
         print("  2. Log into CivitAI (via Discord)")
         print("  3. Make sure NSFW content is enabled in settings")
-        print("  4. Run this script again")
+        print("  4. Re-export cookies, or set a CivitAI API key")
+        print("  5. Run this script again")
 
 
 def cmd_verify(args, orchestrator: DownloadOrchestrator, config: dict):
@@ -459,6 +481,90 @@ def cmd_list_collections(args, orchestrator: DownloadOrchestrator, config: dict)
 
     # Output clean JSON to real stdout (C# will parse this)
     print(json_module.dumps(result, ensure_ascii=False, indent=2), file=real_stdout)
+
+
+def cmd_posts(args, orchestrator: DownloadOrchestrator, config: dict):
+    """Fetch own CivitAI posts (incl. scheduled) into the calendar cache JSON."""
+    import json as json_module
+    import datetime
+    import posts_fetcher
+
+    real_stdout = sys.__stdout__
+
+    today = datetime.date.today()
+    range_from = (datetime.date.fromisoformat(args.from_date) if args.from_date
+                  else today - datetime.timedelta(days=4 * 365))
+    range_to = (datetime.date.fromisoformat(args.to_date) if args.to_date
+                else today + datetime.timedelta(days=92))
+    cache_path = Path(args.output) if args.output else posts_fetcher.default_cache_path()
+
+    existing = None if args.full else posts_fetcher.load_cache(cache_path)
+    # A cache without a username came from a fetch that paged the sitewide feed
+    # (pre-fix bug): its posts are not ours. Never build increments on top of it.
+    if existing and not existing.get("username"):
+        existing = None
+
+    def emit_progress(message):
+        # One JSON line per progress update on the REAL stdout; C# reads these
+        # live and shows them. Flush so they arrive as they happen, not buffered.
+        try:
+            print(json_module.dumps({"progress": message}), file=real_stdout, flush=True)
+        except Exception:
+            pass
+
+    # Username: CLI arg > config.yaml 'posts: username:' > resolved via API key.
+    username = args.username or (config.get('posts') or {}).get('username')
+
+    try:
+        cache = posts_fetcher.fetch_posts(
+            orchestrator.api_client, config,
+            username=username,
+            range_from=range_from, range_to=range_to,
+            existing_cache=existing, progress=emit_progress)
+    except PermissionError as e:
+        print(json_module.dumps({"error": "auth", "message": str(e)}), file=real_stdout)
+        sys.exit(2)
+    except Exception as e:
+        print(json_module.dumps({"error": "fetch", "message": str(e)}), file=real_stdout)
+        sys.exit(1)
+
+    emit_progress("Saving…")
+    posts_fetcher.write_cache_atomic(cache, cache_path)
+
+    scheduled = sum(1 for p in cache["posts"] if p.get("scheduled"))
+    images = sum(len(p.get("images") or []) for p in cache["posts"])
+    print(json_module.dumps({
+        "status": "ok",
+        "posts": len(cache["posts"]),
+        "images": images,
+        "scheduled": scheduled,
+        "warnings": len(cache["warnings"]),
+        "cachePath": str(cache_path),
+    }), file=real_stdout)
+
+
+def cmd_schedule_post(args, orchestrator: DownloadOrchestrator, config: dict):
+    """Create a scheduled CivitAI post from a local image file."""
+    import json as json_module
+    import posts_fetcher
+
+    real_stdout = sys.__stdout__
+
+    try:
+        result = posts_fetcher.schedule_post(
+            orchestrator.api_client, args.file, args.publish_at, args.title)
+    except RuntimeError as e:
+        message = str(e)
+        category, _, detail = message.partition(":")
+        if category not in ("auth", "upload", "schedule"):
+            category, detail = "schedule", message
+        print(json_module.dumps({"error": category, "message": detail.strip()}), file=real_stdout)
+        sys.exit(2 if category == "auth" else 1)
+    except Exception as e:
+        print(json_module.dumps({"error": "schedule", "message": str(e)}), file=real_stdout)
+        sys.exit(1)
+
+    print(json_module.dumps(result), file=real_stdout)
 
 
 def main():
@@ -532,11 +638,32 @@ Examples:
     list_collections_parser = subparsers.add_parser('list-collections',
                                                       help='List user collections as JSON')
 
+    # Posts calendar commands
+    posts_parser = subparsers.add_parser('posts',
+                                         help='Fetch own posts (incl. scheduled) into the calendar cache')
+    posts_parser.add_argument('--from', dest='from_date', type=str, default=None,
+                              help='Range start YYYY-MM-DD (default: today - 4 years)')
+    posts_parser.add_argument('--to', dest='to_date', type=str, default=None,
+                              help='Range end YYYY-MM-DD (default: today + 3 months)')
+    posts_parser.add_argument('--full', action='store_true',
+                              help='Ignore existing cache and refetch the whole range')
+    posts_parser.add_argument('--output', type=str, default=None,
+                              help='Cache file path (default: AppData DiffusionToolkit/Civitai/posts_cache.json)')
+    posts_parser.add_argument('--username', type=str, default=None,
+                              help='CivitAI username (default: resolved via API key)')
+
+    schedule_parser = subparsers.add_parser('schedule-post',
+                                            help='Create a scheduled CivitAI post from a local image')
+    schedule_parser.add_argument('--file', required=True, help='Path to the image file')
+    schedule_parser.add_argument('--publish-at', required=True,
+                                 help='Publish date-time, ISO 8601 (e.g. 2026-08-01T17:00:00+02:00)')
+    schedule_parser.add_argument('--title', default=None, help='Optional post title')
+
     args = parser.parse_args()
 
-    # For list-collections, we need clean stdout (JSON only).
+    # For machine-readable commands, we need clean stdout (JSON only).
     # Redirect all console output to stderr before anything else logs to stdout.
-    if args.command == 'list-collections':
+    if args.command in ('list-collections', 'posts', 'schedule-post'):
         import io
         # Redirect print() and logging to stderr so stdout stays clean for JSON
         sys.stdout = sys.stderr
@@ -594,6 +721,8 @@ Examples:
         'verify': cmd_verify,
         'cleanup': cmd_cleanup,
         'list-collections': cmd_list_collections,
+        'posts': cmd_posts,
+        'schedule-post': cmd_schedule_post,
     }
 
     try:

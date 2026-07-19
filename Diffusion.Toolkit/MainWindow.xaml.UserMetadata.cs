@@ -42,7 +42,7 @@ namespace Diffusion.Toolkit
                     ServiceLocator.ProgressService.SetStatus($"Found {candidates.Count:#,###} CivitAI image(s) with an empty prompt…");
 
                     // One shared client for the whole batch so we don't churn HTTP connections.
-                    using var client = new CivitaiClient();
+                    using var client = new CivitaiClient(ServiceLocator.Settings?.GetCivitaiApiKey());
 
                     var processed = 0;
                     foreach (var image in candidates)

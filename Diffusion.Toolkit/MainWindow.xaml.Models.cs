@@ -166,7 +166,7 @@ namespace Diffusion.Toolkit
 
         public async Task<LiteModelCollection> FetchCivitaiModels(CancellationToken token)
         {
-            using var civitai = new CivitaiClient();
+            using var civitai = new CivitaiClient(ServiceLocator.Settings?.GetCivitaiApiKey());
 
             var collection = new LiteModelCollection();
 
