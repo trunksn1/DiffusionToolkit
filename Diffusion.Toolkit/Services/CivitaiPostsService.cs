@@ -594,7 +594,7 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
 {
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 
-    // Lazily-loaded 96px thumbnail for the day-view rows.
+    // Lazily-loaded thumbnail shared by the month cells and day-view rows.
     private System.Windows.Media.ImageSource? _thumbnail;
     public System.Windows.Media.ImageSource? Thumbnail
     {
@@ -603,6 +603,21 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
         {
             _thumbnail = value;
             PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Thumbnail)));
+        }
+    }
+
+    /// <summary>True while a local thumbnail load is in flight, so rebuilds don't queue duplicates.</summary>
+    public bool ThumbnailPending { get; set; }
+
+    // Highlights the day-view row whose image is shown in the preview panel.
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            _isSelected = value;
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsSelected)));
         }
     }
 

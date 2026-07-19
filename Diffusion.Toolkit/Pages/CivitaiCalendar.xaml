@@ -246,8 +246,17 @@
                                 <DataTemplate>
                                     <Border BorderThickness="0,0,0,1" Padding="4,6" CornerRadius="2"
                                             BorderBrush="{DynamicResource NormalBorderBrush}"
-                                            Background="Transparent"
                                             MouseLeftButtonUp="DayImage_Click" Tag="{Binding}">
+                                      <Border.Style>
+                                          <Style TargetType="Border">
+                                              <Setter Property="Background" Value="Transparent"/>
+                                              <Style.Triggers>
+                                                  <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                      <Setter Property="Background" Value="{DynamicResource SelectedBackgroundBrush}"/>
+                                                  </DataTrigger>
+                                              </Style.Triggers>
+                                          </Style>
+                                      </Border.Style>
                                       <DockPanel LastChildFill="True">
                                         <Border DockPanel.Dock="Left" Width="48" Height="48" Margin="0,0,8,0"
                                                 CornerRadius="3" Background="{DynamicResource PreviewBackgroundBrush}">

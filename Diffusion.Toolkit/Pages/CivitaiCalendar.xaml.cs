@@ -214,7 +214,7 @@ namespace Diffusion.Toolkit.Pages
         private const int MaxCellThumbnails = 8;
 
         /// <summary>
-        /// 96px thumbnails, loaded once per image and shared between the month
+        /// Thumbnails, loaded once per image and shared between the month
         /// cells and the day-view rows: matched images from the local file,
         /// unmatched ones straight from the CivitAI CDN (WPF downloads the
         /// BitmapImage URI itself). Images that fail both ways keep a null
@@ -222,20 +222,12 @@ namespace Diffusion.Toolkit.Pages
         /// </summary>
         private void LoadThumbnails(IEnumerable<ResolvedPostImage> images)
         {
-            foreach (var image in images.Where(im => im.Thumbnail == null))
+            foreach (var image in images.Where(im => im.Thumbnail == null && !im.ThumbnailPending))
             {
                 var target = image;
                 if (target.LocalPath != null && File.Exists(target.LocalPath))
                 {
-                    _ = ServiceLocator.ThumbnailService.QueueAsync(
-                        new ThumbnailJob { Path = target.LocalPath!, Width = 96, Height = 96, EntryType = EntryType.File },
-                        result =>
-                        {
-                            if (result.Success && result.Image != null)
-                            {
-                                Dispatcher.Invoke(() => target.Thumbnail = result.Image);
-                            }
-                        });
+                    LoadLocalThumbnail(target);
                 }
                 else if (!string.IsNullOrWhiteSpace(target.Url))
                 {
@@ -261,6 +253,53 @@ namespace Diffusion.Toolkit.Pages
                     }
                 }
             }
+        }
+
+        // Limits concurrent local decodes; mirrors ThumbnailService's own parallelism.
+        private static readonly System.Threading.SemaphoreSlim ThumbnailWorkers = new(2);
+
+        /// <summary>
+        /// Loads a local file thumbnail directly instead of through
+        /// ThumbnailService.QueueAsync: the service's queue silently drops any
+        /// job whose BatchId doesn't match the search page's current batch, so
+        /// calendar jobs queued from here would never complete. Uses the same
+        /// per-folder dt_thumbnails.db cache as the main views.
+        /// </summary>
+        private void LoadLocalThumbnail(ResolvedPostImage target)
+        {
+            target.ThumbnailPending = true;
+            var path = target.LocalPath!;
+            _ = Task.Run(async () =>
+            {
+                await ThumbnailWorkers.WaitAsync();
+                try
+                {
+                    var service = ServiceLocator.ThumbnailService;
+                    var size = service.Size;
+                    BitmapSource? thumbnail = null;
+                    if (!(service.EnableCache && ThumbnailCache.Instance.TryGetThumbnail(path, size, out thumbnail)))
+                    {
+                        thumbnail = service.GetThumbnailImmediate(path, target.Width ?? 0, target.Height ?? 0, size);
+                        if (service.EnableCache && thumbnail is BitmapImage bitmapImage)
+                        {
+                            ThumbnailCache.Instance.AddThumbnail(path, size, bitmapImage);
+                        }
+                    }
+                    if (thumbnail != null)
+                    {
+                        await Dispatcher.BeginInvoke(() => target.Thumbnail = thumbnail);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    target.ThumbnailPending = false;
+                    Logger.Log($"CivitaiCalendar: local thumbnail failed for {path}: {ex.Message}");
+                }
+                finally
+                {
+                    ThumbnailWorkers.Release();
+                }
+            });
         }
 
         // --- Fetching --------------------------------------------------------
@@ -420,6 +459,8 @@ namespace Diffusion.Toolkit.Pages
         /// </summary>
         private async Task SelectImageAsync(ResolvedPostImage image)
         {
+            if (_model.SelectedImage != null) _model.SelectedImage.IsSelected = false;
+            image.IsSelected = true;
             _model.SelectedImage = image;
 
             var path = image.LocalPath ?? image.Candidates.FirstOrDefault()?.Path;
