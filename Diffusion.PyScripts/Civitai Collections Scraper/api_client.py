@@ -22,6 +22,65 @@ from models import ImageItem, Collection
 logger = logging.getLogger(__name__)
 
 
+def _decode_reference_table(value: Any) -> Any:
+    """Decode the reference-table JSON format returned by newer tRPC responses."""
+    if not isinstance(value, list) or not value:
+        return value
+
+    decoded: Dict[int, Any] = {}
+
+    def decode_index(index: int) -> Any:
+        # The serializer uses negative indexes for JavaScript-only values.
+        if index < 0:
+            return None
+        if index >= len(value):
+            raise ValueError(f"Reference index {index} is outside the value table")
+        if index in decoded:
+            return decoded[index]
+
+        item = value[index]
+        if isinstance(item, dict):
+            result: Dict[str, Any] = {}
+            decoded[index] = result
+            for key, reference in item.items():
+                result[key] = (
+                    decode_index(reference) if isinstance(reference, int) else reference
+                )
+            return result
+
+        if isinstance(item, list):
+            result_list: List[Any] = []
+            decoded[index] = result_list
+            result_list.extend(
+                decode_index(reference) if isinstance(reference, int) else reference
+                for reference in item
+            )
+            return result_list
+
+        decoded[index] = item
+        return item
+
+    return decode_index(0)
+
+
+def _extract_trpc_json(data: Any) -> Any:
+    """Normalize legacy and current CivitAI tRPC response wrappers."""
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected tRPC response object, got {type(data).__name__}")
+
+    result = data.get('result')
+    if not isinstance(result, dict):
+        raise ValueError("tRPC response is missing a result object")
+
+    payload = result.get('data')
+    if isinstance(payload, str):
+        payload = _decode_reference_table(json.loads(payload))
+    elif isinstance(payload, dict) and 'json' in payload:
+        payload = payload['json']
+
+    return payload
+
+
 class CivitAIClient:
     """
     Client for CivitAI API with cookie authentication.
@@ -416,21 +475,40 @@ class CivitAIClient:
             response = self._auth_get(url, family='trpc', params=params, timeout=30)
             response.raise_for_status()
 
-            data = response.json()
+            payload = _extract_trpc_json(response.json())
+            if not isinstance(payload, dict):
+                raise ValueError(
+                    f"Expected image page object, got {type(payload).__name__}"
+                )
 
-            # Parse the tRPC response structure
-            items_data = data.get('result', {}).get('data', {}).get('json', {}).get('items', [])
-            next_cursor = data.get('result', {}).get('data', {}).get('json', {}).get('nextCursor')
+            items_data = payload.get('items', [])
+            next_cursor = payload.get('nextCursor')
+            if not isinstance(items_data, list):
+                raise ValueError(
+                    f"Expected image items list, got {type(items_data).__name__}"
+                )
 
             # DEBUG: Log what we got back
             logger.debug(f"API returned {len(items_data)} items for collection {collection_id}")
             if items_data:
                 first_item = items_data[0]
-                logger.debug(f"First item type: {first_item.get('type')}, has {len(first_item.get('images', []))} images, {len(first_item.get('srcs', []))} srcs")
+                if isinstance(first_item, dict):
+                    logger.debug(
+                        f"First item type: {first_item.get('type')}, "
+                        f"has {len(first_item.get('images', []))} images, "
+                        f"{len(first_item.get('srcs', []))} srcs"
+                    )
 
             images = []
             # With image.getInfinite, items_data is directly an array of images!
             for i, img in enumerate(items_data):
+                if not isinstance(img, dict):
+                    logger.error(
+                        f"Error parsing image {i}: expected object, "
+                        f"got {type(img).__name__}"
+                    )
+                    continue
+
                 # Debug first image
                 if i == 0:
                     logger.debug(f"First image has keys: {list(img.keys())}")
@@ -456,7 +534,7 @@ class CivitAIClient:
         except requests.RequestException as e:
             logger.error(f"Failed to fetch collection page: {e}")
             return [], None
-        except (KeyError, json.JSONDecodeError) as e:
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
             logger.error(f"Failed to parse API response: {e}")
             return [], None
 

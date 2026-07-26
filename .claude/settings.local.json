@@ -19,7 +19,10 @@
       "Bash(awk 'END{print NR\" total lines\"}' Diffusion.Toolkit/Models/ImageViewModel.cs)",
       "Bash(GIT_EDITOR=true git commit --amend --no-edit)",
       "Bash(git commit -q -m ' *)",
-      "PowerShell(git *)"
+      "PowerShell(git *)",
+      "PowerShell(gh api *)",
+      "PowerShell(\\(Invoke-RestMethod https://api.github.com/users/trunksn1\\) | Select-Object login,id)",
+      "Bash(python -m py_compile posts_fetcher.py main.py)"
     ]
   }
 }
