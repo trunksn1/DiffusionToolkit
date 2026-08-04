@@ -24,7 +24,9 @@ public class CivitaiPostsService
 {
     public const string AuthFailureMessage =
         "CivitAI authentication failed.\n\n" +
-        "Preferred fix: enter a CivitAI API key in Settings > CivitAI\n" +
+        "Preferred fix: click 'Connect CivitAI Account' in Settings > CivitAI\n" +
+        "and sign in through your browser.\n\n" +
+        "Alternatively, enter a CivitAI API key in Settings > CivitAI\n" +
         "(generate one at civitai.com > Account Settings > API Keys).\n\n" +
         "Alternatively, refresh your cookies:\n" +
         "1. Open Chrome and log into civitai.com\n" +
@@ -136,6 +138,13 @@ public class CivitaiPostsService
             return PythonResult.Failure("error", $"main.py not found at:\n{mainPyPath}");
         }
 
+        // Awaited outside Task.Run: renewal is a network call, and the service
+        // serializes it so concurrent calendar operations cannot race the
+        // refresh-token rotation.
+        var accessToken = ServiceLocator.CivitaiOAuthService == null
+            ? null
+            : await ServiceLocator.CivitaiOAuthService.TryGetAccessTokenAsync(cancellationToken);
+
         return await Task.Run(() =>
         {
             var processInfo = new ProcessStartInfo
@@ -150,11 +159,15 @@ public class CivitaiPostsService
                 StandardOutputEncoding = Encoding.UTF8
             };
 
-            // API key via environment only - never on the command line (logged).
+            // Credentials via environment only - never on the command line (logged).
             var civitaiApiKey = ServiceLocator.Settings?.GetCivitaiApiKey();
             if (!string.IsNullOrWhiteSpace(civitaiApiKey))
             {
                 processInfo.EnvironmentVariables["CIVITAI_API_KEY"] = civitaiApiKey;
+            }
+            if (!string.IsNullOrWhiteSpace(accessToken))
+            {
+                processInfo.EnvironmentVariables["CIVITAI_ACCESS_TOKEN"] = accessToken;
             }
 
             using var process = Process.Start(processInfo);

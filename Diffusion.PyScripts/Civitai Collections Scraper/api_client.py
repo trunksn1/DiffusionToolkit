@@ -8,7 +8,7 @@ configured, behavior is identical to the original cookie-only client).
 import json
 import logging
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from pathlib import Path
 import time
 
@@ -98,20 +98,50 @@ class CivitAIClient:
         # config.yaml. Never log the value.
         self.api_key = (os.environ.get('CIVITAI_API_KEY')
                         or config['api'].get('api_key') or '').strip()
-        # Per-endpoint-family memo: family -> True/False once Bearer has been
-        # observed to work/fail. Families: 'trpc', 'rest'.
-        self._bearer_ok: Dict[str, bool] = {}
+        # OAuth access token, supplied by Diffusion Toolkit which owns the sign-in
+        # and refresh cycle. Short-lived (1h), so it is never persisted here.
+        #
+        # It is NOT interchangeable with the API key: measured 2026-08-04, OAuth
+        # tokens authenticate every tRPC endpoint we use but are rejected with
+        # 401 by the public REST v1 API, which accepts API keys only. Hence the
+        # per-family preference in _auth_get rather than one shared credential.
+        self.access_token = (os.environ.get('CIVITAI_ACCESS_TOKEN') or '').strip()
+        # Memo of which credential works where: (family, credential) ->
+        # True/False once Bearer has been observed to work/fail. Keyed by
+        # credential too, since tRPC may accept the OAuth token while REST only
+        # accepts the API key. Families: 'trpc', 'rest'.
+        self._bearer_ok: Dict[Tuple[str, str], bool] = {}
         self._cookies_loaded = False
 
         # Setup session with retries
         self.session = self._create_session()
 
-        if self.api_key:
+        if self.access_token:
+            logger.info("OAuth access token configured for tRPC; "
+                        f"REST uses {'the API key' if self.api_key else 'cookies'}")
+        elif self.api_key:
             logger.info("API key configured; cookies will be used only as fallback")
         else:
             logger.info("No API key; using cookie authentication")
-            # No key: load cookies eagerly, exactly like the original client.
+            # No credentials: load cookies eagerly, exactly like the original client.
             self._ensure_cookies()
+
+    def auth_mechanism(self, family: str = 'trpc') -> str:
+        """Which credential actually authenticated this family, for reporting."""
+        for kind, _credential in self._credentials_for(family):
+            if self._bearer_ok.get((family, kind)):
+                return kind
+        return "cookies"
+
+    def _credentials_for(self, family: str) -> List[Tuple[str, str]]:
+        """Credentials to try, in order, for an endpoint family.
+
+        tRPC prefers the OAuth token and falls back to the API key; REST v1
+        rejects OAuth tokens outright, so it only ever offers the API key.
+        """
+        if family == 'trpc' and self.access_token:
+            return [('OAuth token', self.access_token), ('API key', self.api_key)]
+        return [('API key', self.api_key)]
 
     def _create_session(self) -> requests.Session:
         """Create a session with retry logic."""
@@ -194,18 +224,21 @@ class CivitAIClient:
         ('trpc' or 'rest') so a rejection is memoized per family and costs at
         most one wasted request per run.
         """
-        if self.api_key and self._bearer_ok.get(family) is not False:
-            headers = dict(kwargs.pop('headers', {}) or {})
-            headers['Authorization'] = f'Bearer {self.api_key}'
-            response = self.session.get(url, headers=headers, **kwargs)
+        headers = dict(kwargs.pop('headers', {}) or {})
+        for kind, credential in self._credentials_for(family):
+            if not credential or self._bearer_ok.get((family, kind)) is False:
+                continue
+            attempt = dict(headers)
+            attempt['Authorization'] = f'Bearer {credential}'
+            response = self.session.get(url, headers=attempt, **kwargs)
             if response.status_code not in (401, 403):
-                self._bearer_ok[family] = True
+                self._bearer_ok[(family, kind)] = True
                 return response
-            logger.info(f"Bearer token not accepted for {family} endpoint "
-                        f"(HTTP {response.status_code}); falling back to cookies")
-            self._bearer_ok[family] = False
+            logger.info(f"{kind} not accepted for {family} endpoint "
+                        f"(HTTP {response.status_code}); trying the next credential")
+            self._bearer_ok[(family, kind)] = False
         self._ensure_cookies()
-        return self.session.get(url, **kwargs)
+        return self.session.get(url, headers=headers, **kwargs)
 
     def _load_cookies(self):
         """Load cookies from file or Chrome browser."""
@@ -369,8 +402,7 @@ class CivitAIClient:
                 timeout=10,
             )
             if response.status_code == 200:
-                mechanism = "API key" if self._bearer_ok.get('trpc') else "cookies"
-                logger.info(f"Authenticated: tRPC API accepted {mechanism}")
+                logger.info(f"Authenticated: tRPC API accepted {self.auth_mechanism('trpc')}")
                 return True
             elif response.status_code == 401:
                 logger.warning("Not authenticated (401) - cookies missing/expired, "

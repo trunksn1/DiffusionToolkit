@@ -289,6 +289,20 @@ public class SettingsModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    /// <summary>"Connected as {username}" or "Not connected". Display only.</summary>
+    public string CivitaiAccountStatus
+    {
+        get;
+        set => SetField(ref field, value);
+    } = "Not connected";
+
+    /// <summary>Drives which of Connect/Sign out is shown.</summary>
+    public bool CivitaiIsConnected
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public ObservableCollection<CivitaiCollectionModel> CivitaiCollections
     {
         get;

@@ -1478,14 +1478,27 @@ namespace Diffusion.Toolkit
                     CreateNoWindow = false
                 };
 
-                // Pass the API key via environment variable only - never on the
+                // Pass credentials via environment variable only - never on the
                 // command line, which is written to DiffusionToolkit.log.
                 var civitaiApiKey = _settings.GetCivitaiApiKey();
                 if (!string.IsNullOrWhiteSpace(civitaiApiKey))
                 {
                     processInfo.EnvironmentVariables["CIVITAI_API_KEY"] = civitaiApiKey;
                 }
-                Logger.Log($"LaunchCivitaiScraper: API key passed via environment: {(!string.IsNullOrWhiteSpace(civitaiApiKey) ? "yes" : "no")}");
+
+                // Refreshed immediately before launch so the child gets close to
+                // the full hour. A sync longer than that outlives the token, and
+                // Python falls back to the API key or cookies rather than failing.
+                var accessToken = ServiceLocator.CivitaiOAuthService == null
+                    ? null
+                    : await ServiceLocator.CivitaiOAuthService.TryGetAccessTokenAsync();
+                if (!string.IsNullOrWhiteSpace(accessToken))
+                {
+                    processInfo.EnvironmentVariables["CIVITAI_ACCESS_TOKEN"] = accessToken;
+                }
+                Logger.Log($"LaunchCivitaiScraper: credentials passed via environment - " +
+                           $"OAuth token: {(!string.IsNullOrWhiteSpace(accessToken) ? "yes" : "no")}, " +
+                           $"API key: {(!string.IsNullOrWhiteSpace(civitaiApiKey) ? "yes" : "no")}");
 
                 Logger.Log("LaunchCivitaiScraper: Starting Python process...");
                 var process = Process.Start(processInfo);

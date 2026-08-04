@@ -249,6 +249,28 @@
                         <Label Content="CivitAI Scraper Settings" FontWeight="Bold" FontSize="14"></Label>
 
                         <StackPanel Orientation="Vertical" Margin="0,10,0,0">
+                            <Label Content="CivitAI Account:"></Label>
+                            <StackPanel Orientation="Horizontal" Margin="0,5,0,5">
+                                <Button x:Name="CivitaiConnectButton"
+                                        Content="Connect CivitAI Account"
+                                        Height="28"
+                                        Padding="15,0"
+                                        Click="CivitaiConnect_Click"/>
+                                <Button x:Name="CivitaiSignOutButton"
+                                        Content="Sign Out"
+                                        Height="28"
+                                        Padding="15,0"
+                                        Margin="10,0,0,0"
+                                        Visibility="Collapsed"
+                                        Click="CivitaiSignOut_Click"/>
+                                <TextBlock Text="{Binding CivitaiAccountStatus}"
+                                           VerticalAlignment="Center"
+                                           Margin="15,0,0,0"
+                                           Foreground="{DynamicResource ForegroundBrush}"/>
+                            </StackPanel>
+                            <TextBlock Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,15" TextWrapping="Wrap"
+                                       Text="Signing in opens civitai.com in your browser. Recommended over an API key: it works for collections, downloads and the posts calendar, and does not expire the way exported cookies do."></TextBlock>
+
                             <Label Content="CivitAI API Key:"></Label>
                             <PasswordBox x:Name="CivitaiApiKeyBox"
                                          Height="26"

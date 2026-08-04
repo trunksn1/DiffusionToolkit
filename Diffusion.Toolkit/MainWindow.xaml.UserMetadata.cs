@@ -42,7 +42,12 @@ namespace Diffusion.Toolkit
                     ServiceLocator.ProgressService.SetStatus($"Found {candidates.Count:#,###} CivitAI image(s) with an empty prompt…");
 
                     // One shared client for the whole batch so we don't churn HTTP connections.
-                    using var client = new CivitaiClient(ServiceLocator.Settings?.GetCivitaiApiKey());
+                    // The batch fetches generation data over tRPC, which prefers the
+                    // OAuth token; the key remains for REST and as the fallback.
+                    var accessToken = ServiceLocator.CivitaiOAuthService == null
+                        ? null
+                        : await ServiceLocator.CivitaiOAuthService.TryGetAccessTokenAsync();
+                    using var client = new CivitaiClient(ServiceLocator.Settings?.GetCivitaiApiKey(), accessToken);
 
                     var processed = 0;
                     foreach (var image in candidates)

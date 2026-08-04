@@ -18,10 +18,16 @@ public class CivitaiClient : IDisposable
     // the generation-data fetch can retry anonymously when the key is rejected.
     private readonly string? _apiKey;
 
-    public CivitaiClient(string? apiKey = null)
+    // OAuth access token, when the user is signed in. Used for tRPC only: the
+    // REST v1 API under _baseUrl rejects OAuth tokens with 401 and accepts API
+    // keys only, so the two credentials are not interchangeable.
+    private readonly string? _accessToken;
+
+    public CivitaiClient(string? apiKey = null, string? accessToken = null)
     {
         _httpClient = new HttpClient();
         _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
+        _accessToken = string.IsNullOrWhiteSpace(accessToken) ? null : accessToken.Trim();
     }
 
     public async Task<Results<LiteModel>?> GetLiteModelsAsync(ModelSearchParameters searchParameters, CancellationToken token)
@@ -98,9 +104,12 @@ public class CivitaiClient : IDisposable
                 req.Headers.TryAddWithoutValidation("Accept", "application/json");
                 req.Headers.TryAddWithoutValidation("Referer", "https://civitai.com/");
                 req.Headers.TryAddWithoutValidation("Origin", "https://civitai.com");
-                if (withBearer && _apiKey != null)
+                // Prefer the OAuth token on tRPC: it is the credential that
+                // reliably authenticates this endpoint family.
+                var bearer = _accessToken ?? _apiKey;
+                if (withBearer && bearer != null)
                 {
-                    req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+                    req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearer);
                 }
                 return req;
             }
@@ -108,9 +117,9 @@ public class CivitaiClient : IDisposable
             using var request = BuildRequest(withBearer: true);
             var response = await _httpClient.SendAsync(request, token);
 
-            // If the key was rejected here, fall back once to the anonymous
+            // If the credential was rejected here, fall back once to the anonymous
             // spoofed-headers request, which works for public images.
-            if (_apiKey != null &&
+            if ((_accessToken ?? _apiKey) != null &&
                 (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
                  response.StatusCode == System.Net.HttpStatusCode.Forbidden))
             {

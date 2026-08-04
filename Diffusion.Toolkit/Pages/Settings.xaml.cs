@@ -113,6 +113,7 @@ namespace Diffusion.Toolkit.Pages
             _model.CivitaiMaxPagesPerCollection = _settings.CivitaiMaxPagesPerCollection;
             _model.CivitaiApiKey = _settings.GetCivitaiApiKey();
             CivitaiApiKeyBox.Password = _model.CivitaiApiKey ?? "";
+            UpdateCivitaiAccountState();
             LoadCivitaiAlbumDropdown();
             LoadCivitaiCollections();
 
@@ -536,6 +537,86 @@ namespace Diffusion.Toolkit.Pages
             }
         }
 
+        /// <summary>
+        /// A live OAuth access token, or null when not signed in. Never throws:
+        /// callers still have the API key and cookie paths to fall back on.
+        /// </summary>
+        private static async Task<string?> GetCivitaiAccessTokenAsync()
+        {
+            var oauth = ServiceLocator.CivitaiOAuthService;
+            return oauth == null ? null : await oauth.TryGetAccessTokenAsync();
+        }
+
+        /// <summary>Reflects the CivitAI sign-in state into the settings UI.</summary>
+        private void UpdateCivitaiAccountState()
+        {
+            var oauth = ServiceLocator.CivitaiOAuthService;
+            var username = oauth?.ConnectedUsername;
+            var connected = !string.IsNullOrEmpty(username);
+
+            _model.CivitaiAccountStatus = connected
+                ? $"Connected as {username}"
+                : "Not connected";
+            _model.CivitaiIsConnected = connected;
+
+            // Set here rather than bound: the shared BoolToVisibilityConverter
+            // yields Hidden, which would leave a hole in this horizontal panel.
+            CivitaiSignOutButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+            CivitaiConnectButton.Content = connected ? "Reconnect" : "Connect CivitAI Account";
+        }
+
+        private async void CivitaiConnect_Click(object sender, RoutedEventArgs e)
+        {
+            var oauth = ServiceLocator.CivitaiOAuthService;
+            if (oauth == null) return;
+
+            CivitaiConnectButton.IsEnabled = false;
+            try
+            {
+                var session = await oauth.SignInAsync();
+                UpdateCivitaiAccountState();
+                MessageBox.Show(_window,
+                    $"Connected to CivitAI as {session.Username}.",
+                    "CivitAI", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (CivitaiOAuthException ex)
+            {
+                // Expected, user-facing failures: cancelled consent, a busy
+                // port, a timeout. The message is already written for a person.
+                Logger.Log($"CivitaiConnect: {ex.Message}");
+                MessageBox.Show(_window, ex.Message,
+                    "CivitAI Sign-in", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"CivitaiConnect: unexpected failure: {ex}");
+                MessageBox.Show(_window,
+                    $"CivitAI sign-in failed.\n\n{ex.Message}",
+                    "CivitAI Sign-in", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                CivitaiConnectButton.IsEnabled = true;
+            }
+        }
+
+        private void CivitaiSignOut_Click(object sender, RoutedEventArgs e)
+        {
+            var oauth = ServiceLocator.CivitaiOAuthService;
+            if (oauth == null) return;
+
+            oauth.SignOut();
+            UpdateCivitaiAccountState();
+
+            // Signing out here cannot revoke the grant on CivitAI's side: a
+            // public client has no secret to authenticate a revocation call.
+            MessageBox.Show(_window,
+                "Signed out of CivitAI on this computer.\n\n" +
+                "To also revoke access on CivitAI's side, remove Diffusion Toolkit " +
+                "from Account Settings > OAuth Applications on civitai.com.",
+                "CivitAI", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         private void LoadCivitaiCollections()
         {
             _model.CivitaiCollections = new ObservableCollection<CivitaiCollectionModel>(
@@ -577,6 +658,11 @@ namespace Diffusion.Toolkit.Pages
 
             try
             {
+                // Refreshed here, on the UI thread's async path, rather than
+                // inside Task.Run: renewal is a network call that must not race
+                // with other callers.
+                var accessToken = await GetCivitaiAccessTokenAsync();
+
                 var output = await Task.Run(() =>
                 {
                     var processInfo = new ProcessStartInfo
@@ -591,11 +677,16 @@ namespace Diffusion.Toolkit.Pages
                         StandardOutputEncoding = Encoding.UTF8
                     };
 
-                    // API key via environment only - never on the command line (logged).
+                    // Credentials via environment only - never on the command
+                    // line, which is written to DiffusionToolkit.log.
                     var civitaiApiKey = _settings.GetCivitaiApiKey();
                     if (!string.IsNullOrWhiteSpace(civitaiApiKey))
                     {
                         processInfo.EnvironmentVariables["CIVITAI_API_KEY"] = civitaiApiKey;
+                    }
+                    if (!string.IsNullOrWhiteSpace(accessToken))
+                    {
+                        processInfo.EnvironmentVariables["CIVITAI_ACCESS_TOKEN"] = accessToken;
                     }
 
                     using var process = Process.Start(processInfo);

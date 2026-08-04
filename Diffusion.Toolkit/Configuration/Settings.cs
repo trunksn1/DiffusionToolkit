@@ -511,6 +511,26 @@ public class Settings : SettingsContainer, IScanOptions
 
     public void SetCivitaiApiKey(string? apiKey) => CivitaiApiKeyProtected = Common.ProtectedString.Protect(apiKey?.Trim());
 
+    // DPAPI-encrypted (CurrentUser) base64 ciphertext of the serialized CivitAI
+    // OAuth session (access token, refresh token, expiry, scope, identity).
+    // Plaintext never touches settings.json; use
+    // GetCivitaiOAuthSession/SetCivitaiOAuthSession.
+    public string? CivitaiOAuthSessionProtected
+    {
+        get;
+        set => UpdateValue(ref field, value);
+    }
+
+    /// <summary>
+    /// The stored session JSON, or null when signed out. Also returns null when
+    /// the ciphertext cannot be decrypted - a settings.json copied from another
+    /// Windows user - which callers treat as signed out, matching the API key.
+    /// </summary>
+    public string? GetCivitaiOAuthSession() => Common.ProtectedString.Unprotect(CivitaiOAuthSessionProtected);
+
+    public void SetCivitaiOAuthSession(string? sessionJson) =>
+        CivitaiOAuthSessionProtected = Common.ProtectedString.Protect(sessionJson);
+
     public List<CivitaiCollectionConfig> CivitaiCollections
     {
         get;

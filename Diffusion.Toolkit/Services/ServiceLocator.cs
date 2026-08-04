@@ -65,6 +65,16 @@ public class ServiceLocator
         get { return field ??= new ThumbnailNavigationService(); }
     }
 
+    /// <summary>
+    /// CivitAI OAuth sign-in. Null until settings are loaded, since the service
+    /// stores its session there. Shared deliberately: the instance serializes
+    /// token refresh, which rotates the refresh token and must not race.
+    /// </summary>
+    public static CivitaiOAuthService? CivitaiOAuthService
+    {
+        get { return _settings == null ? null : field ??= new CivitaiOAuthService(_settings); }
+    }
+
     public static SearchService SearchService
     {
         get;

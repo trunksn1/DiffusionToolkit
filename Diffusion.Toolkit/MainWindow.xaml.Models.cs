@@ -166,6 +166,8 @@ namespace Diffusion.Toolkit
 
         public async Task<LiteModelCollection> FetchCivitaiModels(CancellationToken token)
         {
+            // Model search runs against REST v1, which rejects OAuth tokens, so
+            // this deliberately passes the API key only.
             using var civitai = new CivitaiClient(ServiceLocator.Settings?.GetCivitaiApiKey());
 
             var collection = new LiteModelCollection();

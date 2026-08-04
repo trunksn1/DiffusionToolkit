@@ -384,6 +384,8 @@ def cmd_test_auth(args, orchestrator: DownloadOrchestrator, config: dict):
     print("-" * 40)
 
     client = orchestrator.api_client
+    if client.access_token:
+        print("[i] Signed in to CivitAI (OAuth access token supplied by Diffusion Toolkit).")
     if client.api_key:
         username = client.test_api_key()
         if username:
@@ -391,14 +393,13 @@ def cmd_test_auth(args, orchestrator: DownloadOrchestrator, config: dict):
         else:
             print("[FAIL] API key rejected - regenerate it at")
             print("  civitai.com -> Account Settings -> API Keys")
-    else:
+    elif not client.access_token:
         print("[i] No API key configured (using cookies).")
-        print("  Tip: an API key is more robust than cookies - set one in")
-        print("  Diffusion Toolkit under Settings > CivitAI.")
+        print("  Tip: sign in to CivitAI in Diffusion Toolkit under")
+        print("  Settings > CivitAI - more robust than cookies or a pasted key.")
 
     if orchestrator.test_authentication():
-        mechanism = "API key" if client._bearer_ok.get('trpc') else "cookies"
-        print(f"[OK] Authentication successful (tRPC accepted: {mechanism})!")
+        print(f"[OK] Authentication successful (tRPC accepted: {client.auth_mechanism('trpc')})!")
         print("  You can access NSFW content.")
     else:
         print("[FAIL] Authentication failed")
