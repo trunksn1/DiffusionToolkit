@@ -137,6 +137,18 @@ public class CalendarDayModel : BaseNotify
     public bool IsToday { get; init; }
     public bool IsFuture { get; init; }
 
+    /// <summary>
+    /// True for days CivitAI will not accept a scheduled post on (more than
+    /// <see cref="CivitaiPostsService.MaxScheduleDaysAhead"/> days out). The
+    /// calendar greys these and refuses drops on them, so the ceiling is
+    /// visible before an upload fails against it.
+    /// </summary>
+    public bool IsBeyondScheduleLimit => Date.Date > CivitaiPostsService.LastSchedulableDate;
+
+    public string ScheduleLimitTooltip =>
+        $"CivitAI only accepts posts scheduled up to {CivitaiPostsService.MaxScheduleDaysAhead} days ahead " +
+        $"(through {CivitaiPostsService.LastSchedulableDate:d}).";
+
     private bool _isSelected;
     public bool IsSelected
     {

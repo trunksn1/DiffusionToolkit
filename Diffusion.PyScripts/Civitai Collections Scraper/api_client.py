@@ -138,8 +138,19 @@ class CivitAIClient:
 
         tRPC prefers the OAuth token and falls back to the API key; REST v1
         rejects OAuth tokens outright, so it only ever offers the API key.
+
+        Families:
+          'trpc'    - /api/trpc/*, reads and mutations. OAuth first.
+          'rest'    - /api/v1/*. API key only; OAuth is rejected there.
+          'session' - NextAuth /api/auth/session. Kept apart from 'rest' so
+                      trying OAuth here costs nothing when /api/v1 has already
+                      memoized a rejection.
+          'upload'  - /api/v1/image-upload. Nominally REST, but it is the
+                      website's own upload handshake rather than the public
+                      API, so whether it honours a Bearer token is unmeasured;
+                      it gets its own family to try OAuth once and memoize.
         """
-        if family == 'trpc' and self.access_token:
+        if family in ('trpc', 'session', 'upload') and self.access_token:
             return [('OAuth token', self.access_token), ('API key', self.api_key)]
         return [('API key', self.api_key)]
 
@@ -217,12 +228,17 @@ class CivitAIClient:
             self._cookies_loaded = True
             self._load_cookies()
 
-    def _auth_get(self, url: str, family: str = 'trpc', **kwargs) -> requests.Response:
-        """GET with Bearer auth when available, falling back to cookies on 401/403.
+    def _auth_request(self, method: str, url: str, family: str = 'trpc',
+                      **kwargs) -> requests.Response:
+        """Request with Bearer auth when available, falling back to cookies on 401/403.
 
         The single decision point for authentication. `family` groups endpoints
-        ('trpc' or 'rest') so a rejection is memoized per family and costs at
-        most one wasted request per run.
+        (see _credentials_for) so a rejection is memoized per family and costs
+        at most one wasted request per run.
+
+        The body is re-sent on each attempt, so callers must pass a re-usable
+        body (`json=`, `data=<bytes>`) and never a file object or generator -
+        a consumed stream would silently upload nothing on the retry.
         """
         headers = dict(kwargs.pop('headers', {}) or {})
         for kind, credential in self._credentials_for(family):
@@ -230,7 +246,7 @@ class CivitAIClient:
                 continue
             attempt = dict(headers)
             attempt['Authorization'] = f'Bearer {credential}'
-            response = self.session.get(url, headers=attempt, **kwargs)
+            response = self.session.request(method, url, headers=attempt, **kwargs)
             if response.status_code not in (401, 403):
                 self._bearer_ok[(family, kind)] = True
                 return response
@@ -238,7 +254,21 @@ class CivitAIClient:
                         f"(HTTP {response.status_code}); trying the next credential")
             self._bearer_ok[(family, kind)] = False
         self._ensure_cookies()
-        return self.session.get(url, headers=headers, **kwargs)
+        return self.session.request(method, url, headers=headers, **kwargs)
+
+    def _auth_get(self, url: str, family: str = 'trpc', **kwargs) -> requests.Response:
+        """GET with Bearer auth when available, falling back to cookies."""
+        return self._auth_request('GET', url, family, **kwargs)
+
+    def _auth_post(self, url: str, family: str = 'trpc', **kwargs) -> requests.Response:
+        """POST with Bearer auth when available, falling back to cookies.
+
+        Write mutations were cookie-only until now. post.create over OAuth with
+        the Media & Posts Write scope was verified working on 2026-08-04, so
+        mutations go through the same credential ladder as reads and no longer
+        need an exported cookie file.
+        """
+        return self._auth_request('POST', url, family, **kwargs)
 
     def _load_cookies(self):
         """Load cookies from file or Chrome browser."""

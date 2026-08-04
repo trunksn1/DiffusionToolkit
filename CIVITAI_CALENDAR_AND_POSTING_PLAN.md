@@ -1,5 +1,23 @@
 # CivitAI Calendar & Posting — Plan
 
+> **Status: implemented.** Every section below is in the code as of the commit
+> that follows this document; the build is clean and the Python changes are
+> exercised by the checks in "Verification". Two things remain measurements
+> rather than facts, both handled tolerantly rather than assumed:
+> the exact names of CivitAI's stats fields, and whether `/v1/image-upload`
+> accepts an OAuth token. `probe_stats.py` answers both in about two minutes —
+> run it when convenient and paste the summary into
+> `CIVITAI_OAUTH_IMPLEMENTATION_PLAN.md`'s verified table.
+>
+> Two aesthetic requests arrived after the plan was written and are also
+> implemented: a stronger "today" marker, and greying out days past CivitAI's
+> 90-day scheduling ceiling. See "Calendar date affordances" at the end.
+>
+> Two decisions were taken during implementation, on request:
+> the WebView2 uploader stays the **default** for "Post to CivitAI" and the API
+> path is a second menu item; and the OAuth scope mask is **unchanged**, so a
+> failed upload reports the orphaned draft's URL instead of deleting it.
+
 Four related pieces of work, all on top of the OAuth client added in
 `Services/CivitaiOAuthService.cs`:
 
@@ -382,6 +400,25 @@ Each step is independently shippable and leaves the API-key path working.
 - Regression for all of the above: `DiffusionToolkit.log` — the Python exit code
   and the `auth_mechanism` line tell you *which* credential actually did the
   work, which is the thing that silently regresses.
+
+## Calendar date affordances
+
+Added after the original plan, both purely local (no network, no fetch):
+
+- **Today** now reads at a glance: a blue 2px border, a tinted cell background,
+  the day number in bold blue, and a small `TODAY` label. The trigger sits after
+  `HasScheduled` so today always keeps its own border, and before `IsSelected`
+  so selecting today still looks selected. It follows the system date via
+  `DateTime.Today`, evaluated when the month is built.
+- **Beyond +90 days** is greyed (`OutOfRangeBrush`, reduced opacity) with a 🔒
+  glyph and a tooltip naming the exact last schedulable date. CivitAI rejects
+  publish dates past that window, so the ceiling is now visible before an
+  upload fails against it. The limit lives in one place —
+  `CivitaiPostsService.MaxScheduleDaysAhead` / `LastSchedulableDate` — and is
+  enforced in four: the month cell styling, drag-over and drop on the calendar,
+  `SchedulePostWindow`, and the metadata panel's Schedule tab (both the date
+  picker's `DisplayDateEnd` and the submit-time check, since a picker limit
+  alone is not a validation).
 
 ## Risks
 

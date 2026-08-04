@@ -18,6 +18,12 @@
         <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
         <converters:LocalTimeConverter x:Key="LocalTimeConverter"/>
         <SolidColorBrush x:Key="ScheduledBrush" Color="#E0A800"/>
+        <!-- Fixed colours rather than theme brushes: these have to stay legible
+             against both the light and dark cell backgrounds, and the alpha
+             channel does the blending. -->
+        <SolidColorBrush x:Key="TodayBrush" Color="#3B9EFF"/>
+        <SolidColorBrush x:Key="TodayBackgroundBrush" Color="#333B9EFF"/>
+        <SolidColorBrush x:Key="OutOfRangeBrush" Color="#26808080"/>
     </pages:NavigationPage.Resources>
 
     <Grid Margin="10">
@@ -45,6 +51,7 @@
                     ToolTip="Download posted images that are not in your library into the 'Posted' subfolder of your first root folder."
                     IsEnabled="{Binding IsRefreshing, Converter={StaticResource InverseBoolConverter}}"/>
             <TextBlock Text="{Binding LastUpdated}" DockPanel.Dock="Right" VerticalAlignment="Center"
+                       ToolTip="Reaction, comment and tip counts are a snapshot from this fetch, not live."
                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.6" Margin="6,0"/>
         </DockPanel>
 
@@ -143,13 +150,24 @@
                                             <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                                 <Setter Property="Opacity" Value="0.35"/>
                                             </DataTrigger>
+                                            <!-- Past the scheduling ceiling: greyed out and struck through
+                                                 so it reads as unavailable rather than merely empty. -->
+                                            <DataTrigger Binding="{Binding IsBeyondScheduleLimit}" Value="True">
+                                                <Setter Property="Background" Value="{StaticResource OutOfRangeBrush}"/>
+                                                <Setter Property="Opacity" Value="0.45"/>
+                                                <Setter Property="ToolTip" Value="{Binding ScheduleLimitTooltip}"/>
+                                            </DataTrigger>
                                             <DataTrigger Binding="{Binding HasScheduled}" Value="True">
                                                 <Setter Property="BorderBrush" Value="{StaticResource ScheduledBrush}"/>
                                                 <Setter Property="BorderThickness" Value="2"/>
                                             </DataTrigger>
+                                            <!-- After HasScheduled so today always keeps its own border;
+                                                 before IsSelected so selecting today still reads as selected. -->
                                             <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource TodayBrush}"/>
                                                 <Setter Property="BorderThickness" Value="2"/>
+                                                <Setter Property="Background" Value="{StaticResource TodayBackgroundBrush}"/>
+                                                <Setter Property="Opacity" Value="1"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                                 <Setter Property="Background" Value="{DynamicResource SelectedBackgroundBrush}"/>
@@ -163,8 +181,28 @@
                                         <RowDefinition Height="*"/>
                                     </Grid.RowDefinitions>
                                     <DockPanel Grid.Row="0" LastChildFill="False">
-                                        <TextBlock Text="{Binding DayNumber}" FontWeight="SemiBold" DockPanel.Dock="Left"
-                                                   Foreground="{DynamicResource ForegroundBrush}"/>
+                                        <TextBlock Text="{Binding DayNumber}" DockPanel.Dock="Left">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                            <Setter Property="FontWeight" Value="Bold"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource TodayBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock DockPanel.Dock="Left" Text="TODAY" FontSize="8" FontWeight="Bold"
+                                                   Margin="4,3,0,0" VerticalAlignment="Top"
+                                                   Foreground="{StaticResource TodayBrush}"
+                                                   Visibility="{Binding IsToday, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        <TextBlock DockPanel.Dock="Right" Text="🔒" FontSize="9" Margin="0,0,2,0"
+                                                   Foreground="{DynamicResource ForegroundBrush}" Opacity="0.7"
+                                                   ToolTip="{Binding ScheduleLimitTooltip}"
+                                                   Visibility="{Binding IsBeyondScheduleLimit, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         <Border DockPanel.Dock="Right" CornerRadius="8" Padding="5,0"
                                                 Background="{DynamicResource PrimaryBrush}"
                                                 Visibility="{Binding HasImages, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -247,6 +285,15 @@
                                     <Border BorderThickness="0,0,0,1" Padding="4,6" CornerRadius="2"
                                             BorderBrush="{DynamicResource NormalBorderBrush}"
                                             MouseLeftButtonUp="DayImage_Click" Tag="{Binding}">
+                                      <Border.ContextMenu>
+                                          <!-- ContextMenu sits outside the visual tree, so the row's
+                                               DataContext has to be pulled in from the placement target. -->
+                                          <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                              <MenuItem Header="Show in Search" Click="ShowInSearch_Click" Tag="{Binding}"/>
+                                              <MenuItem Header="Open with the default viewer" Click="OpenLocal_Click" Tag="{Binding}"/>
+                                              <MenuItem Header="Open on CivitAI" Click="OpenOnCivitai_Click" Tag="{Binding}"/>
+                                          </ContextMenu>
+                                      </Border.ContextMenu>
                                       <Border.Style>
                                           <Style TargetType="Border">
                                               <Setter Property="Background" Value="Transparent"/>
@@ -281,9 +328,30 @@
                                             </DockPanel>
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="11"
                                                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.7"/>
+                                            <!-- Compact engagement: totals only, this row is narrow.
+                                                 The full breakdown lives in the preview panel below. -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                                                        Visibility="{Binding HasStats, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock FontSize="11" Margin="0,0,8,0"
+                                                           Foreground="{DynamicResource ForegroundBrush}" Opacity="0.75"
+                                                           ToolTip="Total reactions"
+                                                           Visibility="{Binding HasReactions, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Run Text="♥"/><Run Text=" "/><Run Text="{Binding ReactionSummary, Mode=OneWay}"/>
+                                                </TextBlock>
+                                                <TextBlock FontSize="11" Margin="0,0,8,0"
+                                                           Foreground="{DynamicResource ForegroundBrush}" Opacity="0.75"
+                                                           ToolTip="Comments"
+                                                           Visibility="{Binding HasComments, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Run Text="💬"/><Run Text=" "/><Run Text="{Binding CommentSummary, Mode=OneWay}"/>
+                                                </TextBlock>
+                                                <TextBlock Text="no reactions yet" FontSize="10" FontStyle="Italic"
+                                                           Foreground="{DynamicResource ForegroundBrush}" Opacity="0.4"
+                                                           Visibility="{Binding HasNoEngagement, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                            </StackPanel>
                                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                                 <Button Content="Open on CivitAI" Click="OpenOnCivitai_Click" Tag="{Binding}" Padding="6,2" Margin="0,0,4,0"/>
-                                                <Button Content="Open in app" Click="OpenLocal_Click" Tag="{Binding}" Padding="6,2"
+                                                <Button Content="Show in Search" Click="ShowInSearch_Click" Tag="{Binding}" Padding="6,2"
+                                                        ToolTip="Show this image on its own in the Search page"
                                                         Visibility="{Binding LocalPath, Converter={StaticResource NullToVisibilityConverter}}"/>
                                             </StackPanel>
                                             <TextBlock Text="⚠ multiple local matches — best candidate shown in preview" FontSize="10"
@@ -313,10 +381,54 @@
                         <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedImage.Name, FallbackValue='Preview'}"
                                    FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
                                    Foreground="{DynamicResource ForegroundBrush}"/>
+
+                        <!-- Full engagement breakdown. Each chip hides at zero so an
+                             untouched post shows one honest line instead of a wall of
+                             zeroes; counters the fetch never reported are absent, not 0. -->
+                        <Border DockPanel.Dock="Top" Margin="0,0,0,4" Padding="6,3" CornerRadius="3"
+                                Background="{DynamicResource ControlBackgroundBrush}"
+                                DataContext="{Binding SelectedImage}"
+                                Visibility="{Binding HasStats, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}">
+                            <WrapPanel>
+                                <WrapPanel.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="11"/>
+                                        <Setter Property="Margin" Value="0,0,10,0"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+                                        <Setter Property="Opacity" Value="0.85"/>
+                                    </Style>
+                                </WrapPanel.Resources>
+                                <TextBlock Text="{Binding LikeText}" ToolTip="Likes"
+                                           Visibility="{Binding HasLikes, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding HeartText}" ToolTip="Hearts"
+                                           Visibility="{Binding HasHearts, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding LaughText}" ToolTip="Laughs"
+                                           Visibility="{Binding HasLaughs, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding CryText}" ToolTip="Cries"
+                                           Visibility="{Binding HasCries, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding DislikeText}" ToolTip="Dislikes"
+                                           Visibility="{Binding HasDislikes, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding CommentText}" ToolTip="Comments"
+                                           Visibility="{Binding HasComments, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding CollectedText}" ToolTip="Times collected"
+                                           Visibility="{Binding HasCollected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding TippedText}" ToolTip="Buzz tipped"
+                                           Visibility="{Binding HasTips, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding ViewText}" ToolTip="Views"
+                                           Visibility="{Binding HasViews, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="No reactions, comments or tips yet." FontStyle="Italic" Opacity="0.5"
+                                           Visibility="{Binding HasNoEngagement, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </WrapPanel>
+                        </Border>
+
                         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0"
                                     Visibility="{Binding HasSelectedImage, Converter={StaticResource BoolToVisibilityConverter}}">
                             <Button Content="Open on CivitAI" Click="OpenSelectedOnCivitai_Click" Padding="8,3" Margin="0,0,4,0"/>
-                            <Button Content="Open in app" Click="OpenSelectedLocal_Click" Padding="8,3" Margin="0,0,4,0"
+                            <Button Content="Show in Search" Click="ShowSelectedInSearch_Click" Padding="8,3" Margin="0,0,4,0"
+                                    ToolTip="Show this image on its own in the Search page"
+                                    Visibility="{Binding SelectedImageHasLocal, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <Button Content="Open externally" Click="OpenSelectedLocal_Click" Padding="8,3" Margin="0,0,4,0"
+                                    ToolTip="Open the file with the Windows default image viewer"
                                     Visibility="{Binding SelectedImageHasLocal, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <TextBlock Text="Drag the image onto a future day to reschedule it" FontSize="10"
                                        VerticalAlignment="Center" Foreground="{DynamicResource ForegroundBrush}" Opacity="0.5"

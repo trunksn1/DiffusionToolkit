@@ -77,6 +77,7 @@ namespace Diffusion.Toolkit.Controls
             Model.CopyCommand = new RelayCommand<object>(o => CopySelected());
             Model.MoveCommand = new RelayCommand<object>(o => MoveSelected());
             Model.PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
+            Model.PostToCivitaiInAppCommand = new RelayCommand<object>(o => PostToCivitaiInApp());
             Model.SendToTokenAnalyzerCommand = new RelayCommand<object>(o => SendToTokenAnalyzer());
             Model.OpenInComfyUICommand = new RelayCommand<object>(o => OpenInComfyUI());
             Model.FindSimilarCommand = new RelayCommand<object>(o => FindSimilarImages());
@@ -194,6 +195,12 @@ namespace Diffusion.Toolkit.Controls
         {
             var imageEntries = ThumbnailListView.SelectedItems.Cast<ImageEntry>().ToList();
             ServiceLocator.CivitaiPostService.PostImages(imageEntries);
+        }
+
+        private void PostToCivitaiInApp()
+        {
+            var imageEntries = ThumbnailListView.SelectedItems.Cast<ImageEntry>().ToList();
+            _ = ServiceLocator.CivitaiPostService.PostImagesInApp(imageEntries);
         }
 
         private async void SendToTokenAnalyzer()

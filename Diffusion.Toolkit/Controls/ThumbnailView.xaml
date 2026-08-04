@@ -575,6 +575,8 @@
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="{lex:Loc Thumbnail.ContextMenu.Copy}" InputGestureText="Ctrl+C" Command="{Binding CopyCommand}" />
                     <!--<MenuItem IsEnabled="{Binding IsImage}" Header="{lex:Loc Thumbnail.ContextMenu.Move}" Command="{Binding MoveCommand}"/>-->
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="Post to CivitAI" Command="{Binding PostToCivitaiCommand}" />
+                    <MenuItem Style="{StaticResource FileMenuItem}" Header="Post to CivitAI (in app)" Command="{Binding PostToCivitaiInAppCommand}"
+                              ToolTip="Upload and publish through the CivitAI API, without opening a browser window. All selected images go into one post." />
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="Send to Token Analyzer" Command="{Binding SendToTokenAnalyzerCommand}" />
                     <MenuItem Style="{StaticResource FileMenuItem}" Header="Open in ComfyUI" Command="{Binding OpenInComfyUICommand}" />
                     <Separator Style="{StaticResource FileSeparator}"/>

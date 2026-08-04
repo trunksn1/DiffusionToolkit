@@ -412,12 +412,23 @@ limits:
   (`Settings.CivitaiApiKeyProtected`, accessed via `GetCivitaiApiKey()`/`SetCivitaiApiKey()`)
   and passed to Python via the `CIVITAI_API_KEY` environment variable — NEVER on the
   command line (Arguments are logged to DiffusionToolkit.log)
-- Python tries Bearer first per endpoint family ('trpc'/'rest') and falls back to
-  cookies on 401/403 (see `CivitAIClient._auth_get` in api_client.py); with no key,
-  behavior is cookie-only as before
+- Also supported: OAuth 2.0 + PKCE sign-in (`Services/CivitaiOAuthService.cs`), passed
+  to Python as `CIVITAI_ACCESS_TOKEN`. It is a SECOND credential, not a replacement:
+  tRPC accepts OAuth tokens, REST `/api/v1/*` rejects them (401) and still needs the key
+- Python tries Bearer first per endpoint family and falls back to cookies on 401/403,
+  memoizing the rejection (`CivitAIClient._auth_request`, with `_auth_get`/`_auth_post`
+  wrappers in api_client.py); with no credentials, behavior is cookie-only as before.
+  Families: 'trpc' (OAuth→key→cookies, reads AND mutations), 'rest' (key→cookies),
+  'session' and 'upload' (OAuth→key→cookies)
 - Cookie fallback: `civitai*_cookies.txt` files, then Chrome browser cookies
 - CDN image downloads never send the Bearer token (cookies only)
-- `probe_auth.py` (standalone) empirically tests which endpoints accept Bearer
+- Username resolution can NOT use OAuth (`/v1/users/me` is REST), so
+  `CivitaiPostsService` passes `--username` from the OAuth session — without it an
+  OAuth-only user with no cookies fails the whole posts fetch
+- No Delete scope is ever requested, so `post.delete` 403s: a failed upload reports the
+  orphaned draft's URL instead of silently leaving one behind
+- `probe_auth.py` / `probe_oauth.py` / `probe_stats.py` (standalone) empirically test
+  which endpoints accept which credential, and what stats fields come back
 - NOTE: `LaunchCivitaiScraper` uses `UseShellExecute = false` — required to pass
   environment variables; the Python console window still appears because
   `CreateNoWindow = false` and python.exe is a console app

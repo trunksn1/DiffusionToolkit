@@ -347,6 +347,13 @@ public class ThumbnailViewModel : BaseNotify
         set => SetField(ref field, value);
     }
 
+    /// <summary>Posts through the CivitAI API instead of the embedded browser.</summary>
+    public ICommand PostToCivitaiInAppCommand
+    {
+        get;
+        set => SetField(ref field, value);
+    }
+
     public ICommand SendToTokenAnalyzerCommand
     {
         get;

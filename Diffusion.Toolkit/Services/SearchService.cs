@@ -13,6 +13,7 @@ public class SearchService
     public event EventHandler<SearchFilter> SearchFilter;
     public event EventHandler<FolderViewModel> OpenFolder;
     public event EventHandler<string> OpenPath;
+    public event EventHandler<string> ShowImagePath;
     public event EventHandler Search;
     public event EventHandler Refresh;
     public event EventHandler<SearchView> View;
@@ -77,5 +78,14 @@ public class SearchService
     public void ExecuteOpenPath(string path)
     {
         OpenPath?.Invoke(this, path);
+    }
+
+    /// <summary>
+    /// Reveals a single library file in the search results. Used by pages that
+    /// cannot reach the Search page directly (it is private to MainWindow).
+    /// </summary>
+    public void ExecuteShowImagePath(string path)
+    {
+        ShowImagePath?.Invoke(this, path);
     }
 }

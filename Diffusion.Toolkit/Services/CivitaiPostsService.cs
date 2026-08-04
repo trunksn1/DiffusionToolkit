@@ -71,6 +71,16 @@ public class CivitaiPostsService
     public static readonly DateTime CivitaiFounding = new(2022, 11, 1);
 
     /// <summary>
+    /// How far ahead CivitAI accepts a scheduled publish date. Posts dated
+    /// beyond this are rejected, so the calendar greys those days out and the
+    /// schedule pickers stop there.
+    /// </summary>
+    public const int MaxScheduleDaysAhead = 90;
+
+    /// <summary>The last date a post may be scheduled for, in local time.</summary>
+    public static DateTime LastSchedulableDate => DateTime.Today.AddDays(MaxScheduleDaysAhead);
+
+    /// <summary>
     /// Quick refresh: fetches the current month through +3 months, looking for
     /// newly drafted/scheduled future posts. Incremental — keeps existing history
     /// in the cache and only re-scans recent + future posts.
@@ -78,7 +88,26 @@ public class CivitaiPostsService
     public Task<PythonResult> FetchUpcomingAsync(Action<string>? onProgress = null, CancellationToken cancellationToken = default)
     {
         var firstOfMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        return RunPythonAsync($"main.py posts --from {firstOfMonth:yyyy-MM-dd}", onProgress, cancellationToken);
+        return RunPythonAsync($"main.py posts --from {firstOfMonth:yyyy-MM-dd}{UsernameArgument()}",
+            onProgress, cancellationToken);
+    }
+
+    /// <summary>
+    /// " --username x" for the signed-in account, or empty.
+    ///
+    /// Python resolves the username itself via REST /v1/users/me and the
+    /// NextAuth session endpoint, neither of which accepts an OAuth token - so
+    /// a user who signed in with OAuth and has no API key would fail resolution
+    /// and abort the whole fetch. We already know the name from /userinfo, so
+    /// hand it over. A username is not a credential, so unlike the token it is
+    /// safe on the command line (arguments are written to the log).
+    /// </summary>
+    private static string UsernameArgument()
+    {
+        var username = ServiceLocator.CivitaiOAuthService?.ConnectedUsername;
+        if (string.IsNullOrWhiteSpace(username)) return "";
+        // Defensive: a name with a quote would break argument parsing.
+        return $" --username \"{username.Replace("\"", "")}\"";
     }
 
     /// <summary>
@@ -88,7 +117,8 @@ public class CivitaiPostsService
     public Task<PythonResult> RecoverHistoryAsync(DateTime fromDate, Action<string>? onProgress = null, CancellationToken cancellationToken = default)
     {
         if (fromDate < CivitaiFounding) fromDate = CivitaiFounding;
-        return RunPythonAsync($"main.py posts --full --from {fromDate:yyyy-MM-dd}", onProgress, cancellationToken);
+        return RunPythonAsync($"main.py posts --full --from {fromDate:yyyy-MM-dd}{UsernameArgument()}",
+            onProgress, cancellationToken);
     }
 
     /// <summary>
@@ -109,17 +139,38 @@ public class CivitaiPostsService
         Action<string>? onProgress = null, CancellationToken cancellationToken = default)
     {
         var iso = new DateTimeOffset(publishAtLocal).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        return RunPythonAsync(BuildPostArguments(filePaths, $" --publish-at \"{iso}\"", title),
+            onProgress, cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates a post that goes live immediately, containing every file in
+    /// <paramref name="filePaths"/> (in order).
+    ///
+    /// Same create/upload/attach/publish pipeline as scheduling — only the
+    /// publish date differs — so it needs no browser window and reports real
+    /// progress and errors.
+    /// </summary>
+    public Task<PythonResult> PostNowAsync(IEnumerable<string> filePaths, string? title,
+        Action<string>? onProgress = null, CancellationToken cancellationToken = default)
+    {
+        return RunPythonAsync(BuildPostArguments(filePaths, " --publish-now", title),
+            onProgress, cancellationToken);
+    }
+
+    private static string BuildPostArguments(IEnumerable<string> filePaths, string whenArgument, string? title)
+    {
         var arguments = new StringBuilder("main.py schedule-post");
         foreach (var filePath in filePaths)
         {
             arguments.Append($" --file \"{filePath}\"");
         }
-        arguments.Append($" --publish-at \"{iso}\"");
+        arguments.Append(whenArgument);
         if (!string.IsNullOrWhiteSpace(title))
         {
             arguments.Append($" --title \"{title.Replace("\"", "'")}\"");
         }
-        return RunPythonAsync(arguments.ToString(), onProgress, cancellationToken);
+        return arguments.ToString();
     }
 
     private async Task<PythonResult> RunPythonAsync(string arguments, Action<string>? onProgress = null,
@@ -432,6 +483,7 @@ public class CivitaiPostsService
                     Title = post.Title,
                     PublishedAtUtc = publishedAtUtc,
                     Scheduled = post.Scheduled,
+                    Stats = image.Stats,
                 };
 
                 var candidates = FindCandidates(matchesByName, image);
@@ -602,6 +654,43 @@ public class CivitaiPostImage
     public int? Width { get; set; }
     public int? Height { get; set; }
     public int? NsfwLevel { get; set; }
+
+    /// <summary>
+    /// Engagement counters, or null when the fetch did not report any (an
+    /// unpublished post, or an entry carried over from a version 1 cache).
+    /// Null means "unknown", never "zero".
+    /// </summary>
+    public CivitaiImageStats? Stats { get; set; }
+}
+
+/// <summary>
+/// Per-image engagement counters as reported by CivitAI. Every counter is
+/// nullable: the API's stats block is not contractual, so a missing counter
+/// is unknown rather than zero and the UI hides it instead of showing a 0.
+/// </summary>
+public class CivitaiImageStats
+{
+    public int? LikeCount { get; set; }
+    public int? DislikeCount { get; set; }
+    public int? HeartCount { get; set; }
+    public int? LaughCount { get; set; }
+    public int? CryCount { get; set; }
+    public int? CommentCount { get; set; }
+    public int? CollectedCount { get; set; }
+
+    /// <summary>Buzz tipped on the image.</summary>
+    public int? TippedAmountCount { get; set; }
+
+    public int? ViewCount { get; set; }
+
+    /// <summary>
+    /// All reactions added up. Dislikes are counted: they are reactions, and
+    /// leaving them out would make the compact total disagree with the
+    /// breakdown next to it.
+    /// </summary>
+    public int TotalReactions =>
+        (LikeCount ?? 0) + (DislikeCount ?? 0) + (HeartCount ?? 0)
+        + (LaughCount ?? 0) + (CryCount ?? 0);
 }
 
 public enum MatchStatus
@@ -658,6 +747,50 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
 
     public bool IsAmbiguous => Status == MatchStatus.Ambiguous;
     public bool IsUnmatched => Status == MatchStatus.Unmatched;
+
+    // --- Engagement -------------------------------------------------------
+    //
+    // Pre-formatted for the calendar templates: the chips are hidden when a
+    // counter is unknown or zero, so a post with two hearts shows two hearts
+    // rather than a row of zeroes. Everything is a snapshot from the last
+    // fetch, not live - the panel's "Last updated" line is the caveat.
+
+    public CivitaiImageStats? Stats { get; set; }
+
+    /// <summary>False when the fetch reported no counters at all (unknown, not zero).</summary>
+    public bool HasStats => Stats != null;
+
+    /// <summary>Compact summary for the day list: total reactions.</summary>
+    public string ReactionSummary => (Stats?.TotalReactions ?? 0).ToString();
+    public bool HasReactions => (Stats?.TotalReactions ?? 0) > 0;
+
+    public string CommentSummary => (Stats?.CommentCount ?? 0).ToString();
+    public bool HasComments => (Stats?.CommentCount ?? 0) > 0;
+
+    public string LikeText => $"👍 {Stats?.LikeCount ?? 0}";
+    public bool HasLikes => (Stats?.LikeCount ?? 0) > 0;
+    public string DislikeText => $"👎 {Stats?.DislikeCount ?? 0}";
+    public bool HasDislikes => (Stats?.DislikeCount ?? 0) > 0;
+    public string HeartText => $"❤ {Stats?.HeartCount ?? 0}";
+    public bool HasHearts => (Stats?.HeartCount ?? 0) > 0;
+    public string LaughText => $"😂 {Stats?.LaughCount ?? 0}";
+    public bool HasLaughs => (Stats?.LaughCount ?? 0) > 0;
+    public string CryText => $"😢 {Stats?.CryCount ?? 0}";
+    public bool HasCries => (Stats?.CryCount ?? 0) > 0;
+    public string CommentText => $"💬 {Stats?.CommentCount ?? 0}";
+    public string CollectedText => $"🗂 {Stats?.CollectedCount ?? 0}";
+    public bool HasCollected => (Stats?.CollectedCount ?? 0) > 0;
+    public string TippedText => $"⚡ {Stats?.TippedAmountCount ?? 0}";
+    public bool HasTips => (Stats?.TippedAmountCount ?? 0) > 0;
+    public string ViewText => $"👁 {Stats?.ViewCount ?? 0}";
+    public bool HasViews => (Stats?.ViewCount ?? 0) > 0;
+
+    /// <summary>
+    /// True when stats were reported but every counter is zero — worth saying
+    /// explicitly so an untouched post doesn't look like a fetch that failed.
+    /// </summary>
+    public bool HasNoEngagement => HasStats && !HasReactions && !HasComments
+                                   && !HasCollected && !HasTips && !HasViews;
 
     /// <summary>
     /// True only while the post is still waiting to go live: the queue marker

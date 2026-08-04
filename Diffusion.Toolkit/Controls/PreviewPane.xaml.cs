@@ -141,6 +141,7 @@ namespace Diffusion.Toolkit.Controls
 
         public ICommand CopyPathCommand { get; set; }
         public ICommand PostToCivitaiCommand { get; set; }
+        public ICommand PostToCivitaiInAppCommand { get; set; }
         public ICommand SendToTokenAnalyzerCommand { get; set; }
         public ICommand OpenInComfyUICommand { get; set; }
 
@@ -161,6 +162,7 @@ namespace Diffusion.Toolkit.Controls
 
             CopyPathCommand = new RelayCommand<object>(ServiceLocator.ContextMenuService.CopyPath);
             PostToCivitaiCommand = new RelayCommand<object>(o => PostToCivitai());
+            PostToCivitaiInAppCommand = new RelayCommand<object>(o => PostToCivitaiInApp());
             SendToTokenAnalyzerCommand = new RelayCommand<object>(o => SendToTokenAnalyzer());
             OpenInComfyUICommand = new RelayCommand<object>(o => OpenInComfyUI());
 
@@ -196,6 +198,20 @@ namespace Diffusion.Toolkit.Controls
             };
 
             ServiceLocator.CivitaiPostService.PostImage(imageEntry);
+        }
+
+        private void PostToCivitaiInApp()
+        {
+            if (Image == null) return;
+
+            var imageEntry = new ImageEntry(0)
+            {
+                Id = Image.Id,
+                Path = Image.Path,
+                EntryType = EntryType.File
+            };
+
+            _ = ServiceLocator.CivitaiPostService.PostImagesInApp(new[] { imageEntry });
         }
 
         private async void SendToTokenAnalyzer()

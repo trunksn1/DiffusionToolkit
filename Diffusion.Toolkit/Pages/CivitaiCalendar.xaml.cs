@@ -528,6 +528,15 @@ namespace Diffusion.Toolkit.Pages
             e.Handled = true;
         }
 
+        private void ShowInSearch_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.Tag is ResolvedPostImage image)
+            {
+                ShowInSearch(image);
+            }
+            e.Handled = true;
+        }
+
         private void OpenLocal_Click(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement fe && fe.Tag is ResolvedPostImage image)
@@ -546,6 +555,15 @@ namespace Diffusion.Toolkit.Pages
             }
         }
 
+        private void ShowSelectedInSearch_Click(object sender, RoutedEventArgs e)
+        {
+            var image = _model.SelectedImage;
+            if (image != null)
+            {
+                ShowInSearch(image);
+            }
+        }
+
         private void OpenSelectedLocal_Click(object sender, RoutedEventArgs e)
         {
             var image = _model.SelectedImage;
@@ -555,6 +573,29 @@ namespace Diffusion.Toolkit.Pages
             }
         }
 
+        /// <summary>
+        /// Reveals the matched local file in the Search page, filtered down to
+        /// that one image, so the full library UI (large preview, metadata,
+        /// albums, tagging) is available for it. The Search page is private to
+        /// MainWindow, so this goes through SearchService like every other
+        /// cross-page action.
+        /// </summary>
+        private static void ShowInSearch(ResolvedPostImage image)
+        {
+            if (image.LocalPath == null || !File.Exists(image.LocalPath))
+            {
+                ServiceLocator.ToastService?.Toast(
+                    "This image has no local file to show.", "Show in Search");
+                return;
+            }
+
+            // Navigate first: Search.Navigate re-runs SearchImages on arrival,
+            // which would discard a query set beforehand.
+            ServiceLocator.NavigatorService.Goto("search");
+            ServiceLocator.SearchService.ExecuteShowImagePath(image.LocalPath);
+        }
+
+        /// <summary>Hands the file to the Windows default image viewer.</summary>
         private static void OpenLocalFile(ResolvedPostImage image)
         {
             if (image.LocalPath != null && File.Exists(image.LocalPath))
@@ -581,7 +622,8 @@ namespace Diffusion.Toolkit.Pages
         {
             e.Effects = DragDropEffects.None;
             if (sender is FrameworkElement fe && fe.Tag is CalendarDayModel day
-                && day.Date.Date >= DateTime.Today && e.Data.GetDataPresent(DataFormats.FileDrop))
+                && day.Date.Date >= DateTime.Today && !day.IsBeyondScheduleLimit
+                && e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 e.Effects = DragDropEffects.Copy;
             }
@@ -593,6 +635,13 @@ namespace Diffusion.Toolkit.Pages
             if (sender is not FrameworkElement fe || fe.Tag is not CalendarDayModel day) return;
             if (day.Date.Date < DateTime.Today) return;
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            if (day.IsBeyondScheduleLimit)
+            {
+                // DragOver already refuses the drop; this covers the drag
+                // sources that ignore the effect and drop anyway.
+                ServiceLocator.ToastService?.Toast(day.ScheduleLimitTooltip, "CivitAI");
+                return;
+            }
 
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
             var file = files?.FirstOrDefault();

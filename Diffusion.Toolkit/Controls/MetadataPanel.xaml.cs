@@ -59,6 +59,8 @@ namespace Diffusion.Toolkit.Controls
             foreach (var m in new[] { 0, 15, 30, 45 }) ScheduleMinute.Items.Add(m.ToString("D2"));
 
             ScheduleDate.DisplayDateStart = DateTime.Today;
+            // CivitAI rejects publish dates beyond its scheduling window.
+            ScheduleDate.DisplayDateEnd = CivitaiPostsService.LastSchedulableDate;
             ScheduleDate.SelectedDate = DateTime.Today.AddDays(1);
             ScheduleHour.SelectedIndex = 12;
             ScheduleMinute.SelectedIndex = 0;
@@ -140,6 +142,13 @@ namespace Diffusion.Toolkit.Controls
             if (publishAt <= DateTime.Now)
             {
                 ScheduleStatusText.Text = "The scheduled time must be in the future.";
+                return;
+            }
+            if (publishAt.Date > CivitaiPostsService.LastSchedulableDate)
+            {
+                ScheduleStatusText.Text =
+                    $"CivitAI only accepts posts up to {CivitaiPostsService.MaxScheduleDaysAhead} days ahead " +
+                    $"(through {CivitaiPostsService.LastSchedulableDate:d}).";
                 return;
             }
 

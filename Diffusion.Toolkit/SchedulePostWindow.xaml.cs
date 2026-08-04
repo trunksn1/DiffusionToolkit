@@ -27,6 +27,9 @@ namespace Diffusion.Toolkit
 
             DatePart.SelectedDate = date;
             DatePart.DisplayDateStart = now.Date;
+            // CivitAI rejects publish dates further out than this, so stop the
+            // picker there rather than let the upload fail against the ceiling.
+            DatePart.DisplayDateEnd = Services.CivitaiPostsService.LastSchedulableDate;
             HourPart.SelectedIndex = hour;
             MinutePart.SelectedIndex = 0;
         }
@@ -48,6 +51,14 @@ namespace Diffusion.Toolkit
             {
                 MessageBox.Show(this, "The scheduled time must be in the future.", "Schedule",
                     MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (date > Services.CivitaiPostsService.LastSchedulableDate)
+            {
+                MessageBox.Show(this,
+                    $"CivitAI only accepts posts scheduled up to {Services.CivitaiPostsService.MaxScheduleDaysAhead} " +
+                    $"days ahead (through {Services.CivitaiPostsService.LastSchedulableDate:d}).",
+                    "Schedule", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 

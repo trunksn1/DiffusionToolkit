@@ -122,6 +122,8 @@
                     <Separator></Separator>
                     <MenuItem Header="Copy Path" Command="{Binding CopyPathCommand}"></MenuItem>
                     <MenuItem Header="Post to CivitAI" Command="{Binding PostToCivitaiCommand}"></MenuItem>
+                    <MenuItem Header="Post to CivitAI (in app)" Command="{Binding PostToCivitaiInAppCommand}"
+                              ToolTip="Upload and publish through the CivitAI API, without opening a browser window."></MenuItem>
                     <MenuItem Header="Send to Token Analyzer" Command="{Binding SendToTokenAnalyzerCommand}"></MenuItem>
                     <MenuItem Header="Open in ComfyUI" Command="{Binding OpenInComfyUICommand}">
                         <MenuItem.Icon>

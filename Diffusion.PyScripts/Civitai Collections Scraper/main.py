@@ -554,9 +554,16 @@ def cmd_schedule_post(args, orchestrator: DownloadOrchestrator, config: dict):
     def report_progress(message):
         print(json_module.dumps({"progress": message}), file=real_stdout, flush=True)
 
+    # --publish-now is "schedule for right now": the same create/upload/attach
+    # pipeline, with publishedAt set to the current instant.
+    publish_at = args.publish_at
+    if getattr(args, 'publish_now', False):
+        import datetime as _datetime
+        publish_at = _datetime.datetime.now(_datetime.timezone.utc).isoformat()
+
     try:
         result = posts_fetcher.schedule_post(
-            orchestrator.api_client, args.file, args.publish_at, args.title,
+            orchestrator.api_client, args.file, publish_at, args.title,
             progress=report_progress)
     except RuntimeError as e:
         message = str(e)
@@ -575,7 +582,8 @@ def cmd_schedule_post(args, orchestrator: DownloadOrchestrator, config: dict):
         posts_fetcher.record_scheduled_post(
             orchestrator.api_client, posts_fetcher.default_cache_path(),
             result.get("postId"), result.get("publishedAt"),
-            args.title, result.get("postImages") or [])
+            args.title, result.get("postImages") or [],
+            scheduled=not getattr(args, 'publish_now', False))
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(
@@ -673,8 +681,12 @@ Examples:
                                             help='Create a scheduled CivitAI post from local images')
     schedule_parser.add_argument('--file', required=True, action='append',
                                  help='Path to an image file (repeat to post several images together)')
-    schedule_parser.add_argument('--publish-at', required=True,
-                                 help='Publish date-time, ISO 8601 (e.g. 2026-08-01T17:00:00+02:00)')
+    # Exactly one of the two: a future date, or publish immediately.
+    when_group = schedule_parser.add_mutually_exclusive_group(required=True)
+    when_group.add_argument('--publish-at',
+                            help='Publish date-time, ISO 8601 (e.g. 2026-08-01T17:00:00+02:00)')
+    when_group.add_argument('--publish-now', action='store_true',
+                            help='Publish immediately instead of scheduling')
     schedule_parser.add_argument('--title', default=None, help='Optional post title')
 
     args = parser.parse_args()

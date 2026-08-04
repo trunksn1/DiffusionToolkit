@@ -254,6 +254,11 @@ namespace Diffusion.Toolkit.Pages
                 OpenPath(args);
             };
 
+            ServiceLocator.SearchService.ShowImagePath += (obj, args) =>
+            {
+                ShowImagePath(args);
+            };
+
             _model.Page = 0;
             _model.Pages = 0;
             _model.TotalFiles = 100;
@@ -2072,6 +2077,57 @@ namespace Diffusion.Toolkit.Pages
         public void SetQuery(string queryInputText)
         {
             _model.SearchText = queryInputText;
+        }
+
+        /// <summary>
+        /// Reveals a single library file in the search results, for callers on
+        /// another page (the CivitAI calendar's "Show in Search").
+        ///
+        /// Builds its own QueryOptions instead of reusing the current search
+        /// state: an exact <c>path:</c> query, no folder scope, no album/model/tag
+        /// ticks and no hide filters. The user asked for this specific image, so
+        /// it must appear even when it sits outside the folder they were browsing
+        /// or would be hidden by Hide NSFW. Search settings (nodes, raw data) are
+        /// carried over untouched — those are preferences, not scope.
+        ///
+        /// The first result is selected automatically: ReloadMatches selects
+        /// index 0 when no CursorPosition is given, which loads the preview and
+        /// the metadata panel.
+        /// </summary>
+        private void ShowImagePath(string path)
+        {
+            var hidWork = _model.MainModel.HideNSFW
+                          || _model.MainModel.HideDeleted
+                          || _model.MainModel.HideUnavailable;
+
+            SetView("images", Path.GetFileName(path));
+
+            SearchImages(new QueryOptions
+            {
+                Query = $"path: \"{path}\"",
+                AlbumIds = new List<int>(),
+                Models = new List<ModelInfo>(),
+                TagIds = new List<int>(),
+                Folder = null,
+                HideNSFW = false,
+                HideDeleted = false,
+                HideUnavailable = false,
+                SearchNodes = _model.SearchSettings.SearchNodes,
+                SearchAllProperties = _model.SearchSettings.SearchAllProperties,
+                SearchRawData = _model.SearchSettings.SearchRawData,
+                ComfyQueryOptions = new ComfyQueryOptions
+                {
+                    SearchProperties = _model.SearchSettings.GetNodePropertiesList()
+                }
+            });
+
+            if (hidWork)
+            {
+                // SearchImages pushes these onto the main model, so the toolbar
+                // toggles visibly changed - say why rather than let it look like a bug.
+                ServiceLocator.ToastService?.Toast(
+                    "The hide filters were turned off so this image could be shown.", "Show in Search");
+            }
         }
 
         private void ManageSmartAlbums_OnClick(object sender, RoutedEventArgs e)

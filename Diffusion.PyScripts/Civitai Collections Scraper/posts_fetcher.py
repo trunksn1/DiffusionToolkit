@@ -22,7 +22,11 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 1
+# 2: image entries may carry a "stats" block (reactions/comments/collections/
+#    tips). Version 1 caches have none, and the reader must show "no data"
+#    for them rather than zeroes - an incremental fetch keeps old posts
+#    verbatim, so a v1 cache stays partly statless for a long time.
+CACHE_VERSION = 2
 PAGE_DELAY_SECONDS = 0.5
 INCREMENTAL_OVERLAP_DAYS = 7
 # Hard ceiling per section scan. 400 pages x 50 = 20k posts - far beyond any
@@ -76,19 +80,23 @@ def _trpc_query(client, procedure: str, input_json: Dict[str, Any], timeout=30):
 
 def _trpc_mutate(client, procedure: str, input_json: Dict[str, Any], timeout=30,
                  meta: Optional[Dict[str, Any]] = None):
-    """Write mutations use the cookie session (write-tRPC generally requires it).
+    """Write mutation, Bearer-first with the usual cookie fallback.
+
+    post.create over OAuth (scope bit 64, Media & Posts Write) was verified
+    working on 2026-08-04, so mutations no longer require an exported cookie
+    file - _auth_post tries the OAuth token, then the API key, then cookies,
+    memoizing whichever is rejected.
 
     meta is the superjson annotation block: CivitAI's tRPC layer deserializes
     input with superjson, so typed values (e.g. Date) must be declared there
     or they arrive as plain strings and fail Zod validation. Example:
     meta={"values": {"publishedAt": ["Date"]}}
     """
-    client._ensure_cookies()
     body: Dict[str, Any] = {"json": input_json}
     if meta:
         body["meta"] = meta
-    return client.session.post(f"{client.trpc_url}/{procedure}",
-                               json=body, timeout=timeout)
+    return client._auth_post(f"{client.trpc_url}/{procedure}", family='trpc',
+                             json=body, timeout=timeout)
 
 
 def _trpc_json(resp) -> Any:
@@ -106,6 +114,12 @@ def _resolve_username(client, explicit: Optional[str]) -> str:
     Resolution order: explicit > REST /v1/users/me (needs the Profile scope on
     granular API keys) > NextAuth /api/auth/session (accepts Bearer regardless
     of scopes, and cookie sessions too - verified live 2026-07-19).
+
+    Diffusion Toolkit passes --username explicitly whenever an OAuth session
+    exists, because neither fallback accepts an OAuth token: /v1/users/me is
+    REST v1 (verified to reject them) and the session endpoint's Bearer
+    behavior has only been measured with an API key. Without that, an
+    OAuth-only user with no cookies would fail here and abort the fetch.
     """
     if explicit:
         return explicit
@@ -116,7 +130,7 @@ def _resolve_username(client, explicit: Optional[str]) -> str:
 
     try:
         base = client.api_base.rsplit("/api", 1)[0]
-        resp = client._auth_get(f"{base}/api/auth/session", family="rest", timeout=15)
+        resp = client._auth_get(f"{base}/api/auth/session", family="session", timeout=15)
         if resp.status_code == 200:
             user = (resp.json() or {}).get("user") or {}
             name = user.get("username")
@@ -156,15 +170,59 @@ def _extract_post_images(client, post: Dict[str, Any], warnings: List[str]) -> L
     for img in items:
         if not isinstance(img, dict) or img.get("id") is None:
             continue
-        images.append({
+        entry = {
             "id": img["id"],
             "name": img.get("name"),
             "url": img.get("url"),
             "width": img.get("width"),
             "height": img.get("height"),
             "nsfwLevel": img.get("nsfwLevel"),
-        })
+        }
+        stats = _extract_stats(img)
+        if stats:
+            entry["stats"] = stats
+        images.append(entry)
     return images
+
+
+# Counter names seen on CivitAI image items, newest naming first. The exact set
+# is not contractual - probe_stats.py reports what a live response actually
+# carries - so every key is optional and absent counters stay absent rather
+# than being invented as zero (a real zero and "not reported" look identical in
+# the UI otherwise, and only one of them is true).
+_STAT_FIELDS = {
+    "likeCount": ("likeCountAllTime", "likeCount"),
+    "dislikeCount": ("dislikeCountAllTime", "dislikeCount"),
+    "heartCount": ("heartCountAllTime", "heartCount"),
+    "laughCount": ("laughCountAllTime", "laughCount"),
+    "cryCount": ("cryCountAllTime", "cryCount"),
+    "commentCount": ("commentCountAllTime", "commentCount"),
+    "collectedCount": ("collectedCountAllTime", "collectedCount"),
+    "tippedAmountCount": ("tippedAmountCountAllTime", "tippedAmountCount"),
+    "viewCount": ("viewCountAllTime", "viewCount"),
+}
+
+
+def _extract_stats(item: Dict[str, Any]) -> Optional[Dict[str, int]]:
+    """Normalize an item's stats block to plain integer counters.
+
+    Returns None when the item carries no stats at all, which the calendar
+    renders as "no data" rather than as zeroes.
+    """
+    raw = item.get("stats")
+    if not isinstance(raw, dict):
+        return None
+
+    stats: Dict[str, int] = {}
+    for name, candidates in _STAT_FIELDS.items():
+        for key in candidates:
+            value = raw.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                stats[name] = int(value)
+                break
+    return stats or None
 
 
 def _emit(progress, msg: str):
@@ -555,7 +613,8 @@ def write_cache_atomic(cache: dict, path: Path):
 
 
 def record_scheduled_post(client, cache_path: Path, post_id, published_at: str,
-                          title: Optional[str], images: List[Dict[str, Any]]) -> bool:
+                          title: Optional[str], images: List[Dict[str, Any]],
+                          scheduled: bool = True) -> bool:
     """Insert a just-scheduled post straight into the calendar cache.
 
     The calendar shows it immediately, with no dependency on the scheduled
@@ -580,7 +639,9 @@ def record_scheduled_post(client, cache_path: Path, post_id, published_at: str,
     posts.append({
         "postId": post_id,
         "publishedAt": published_at,
-        "scheduled": True,
+        # A publish-now post is live, not queued - flagging it scheduled would
+        # put a "queued" marker on a post that is already public.
+        "scheduled": scheduled,
         "title": title,
         "images": images,
     })
@@ -647,10 +708,14 @@ def _upload_and_attach(client, post_id, path: Path, index: int) -> Dict[str, Any
             "webp": "image/webp", "gif": "image/gif"}.get(path.suffix.lower().lstrip("."),
                                                           "application/octet-stream")
 
-    # Upload handshake + PUT
-    resp = client.session.post(f"{client.api_base}/v1/image-upload",
-                               json={"filename": path.name, "metadata": {}},
-                               timeout=30)
+    # Upload handshake + PUT.
+    #
+    # image-upload lives under /api/v1 but is the website's own handshake, not
+    # the public REST API, so whether it honours a Bearer token is unmeasured -
+    # family='upload' tries OAuth once, then the API key, then cookies.
+    resp = client._auth_post(f"{client.api_base}/v1/image-upload", family='upload',
+                             json={"filename": path.name, "metadata": {}},
+                             timeout=30)
     if resp.status_code != 200:
         raise RuntimeError(f"upload: image-upload handshake failed for {path.name} "
                            f"(HTTP {resp.status_code})")
@@ -755,11 +820,29 @@ def schedule_post(client, file_paths, publish_at: str, title: Optional[str],
         return {"status": "ok", "postId": post_id, "publishedAt": publish_utc,
                 "images": len(paths), "postImages": attached_images}
 
-    except Exception:
+    except Exception as error:
         # Roll back the draft so failed attempts don't litter the account.
+        #
+        # Diffusion Toolkit deliberately never requests any Delete scope, so
+        # over OAuth this returns 403 and the draft survives. Rather than
+        # pretend it was cleaned up, tell the user which post to remove.
+        orphaned = True
         try:
-            _trpc_mutate(client, "post.delete", {"id": post_id})
-            logger.info(f"Rolled back draft post {post_id}")
+            resp = _trpc_mutate(client, "post.delete", {"id": post_id})
+            orphaned = resp.status_code != 200
+            if orphaned:
+                logger.warning(f"Rollback of draft post {post_id} refused "
+                               f"(HTTP {resp.status_code})")
+            else:
+                logger.info(f"Rolled back draft post {post_id}")
         except Exception as cleanup_error:
             logger.warning(f"Rollback of draft post {post_id} failed: {cleanup_error}")
+
+        if orphaned:
+            host = client._api_host()
+            raise RuntimeError(
+                f"{error}\n\nAn empty draft post was left on your account and "
+                f"could not be deleted automatically (Diffusion Toolkit does not "
+                f"request delete permission). Remove it at "
+                f"https://{host}/posts/{post_id}/edit") from error
         raise
