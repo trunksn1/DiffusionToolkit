@@ -22,7 +22,8 @@
       "PowerShell(git *)",
       "PowerShell(gh api *)",
       "PowerShell(\\(Invoke-RestMethod https://api.github.com/users/trunksn1\\) | Select-Object login,id)",
-      "Bash(python -m py_compile posts_fetcher.py main.py)"
+      "Bash(python -m py_compile posts_fetcher.py main.py)",
+      "PowerShell(git log --oneline myfork/feature/metadata-overlay..HEAD; echo \"---UNPUSHED COUNT---\"; \\(git rev-list --count myfork/feature/metadata-overlay..HEAD\\); echo \"---STASH---\"; git stash list)"
     ]
   }
 }
