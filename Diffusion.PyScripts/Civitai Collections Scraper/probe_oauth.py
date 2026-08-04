@@ -150,11 +150,32 @@ def trpc_post(session, base, procedure, input_json, timeout=20):
     return session.post(f"{base}/api/trpc/{procedure}", json={"json": input_json}, timeout=timeout)
 
 
+try:
+    # Reuse the shipped parser rather than reimplementing it. CivitAI is
+    # migrating tRPC responses from {"json": ...} to a reference-table format
+    # delivered as a JSON *string*; image.getInfinite already returns the new
+    # shape while collection.getAllUser still returns the old one. Using
+    # api_client's own extractor also makes this probe a test of the production
+    # parsing path, not just of the transport.
+    from api_client import _extract_trpc_json as _shipped_extract
+except Exception:  # pragma: no cover - probe must run even if imports break
+    _shipped_extract = None
+
+
 def trpc_json(resp):
     try:
-        return resp.json().get("result", {}).get("data", {}).get("json")
+        body = resp.json()
     except Exception:
         return None
+    if _shipped_extract is not None:
+        try:
+            return _shipped_extract(body)
+        except Exception:
+            pass
+    payload = body.get("result", {}).get("data") if isinstance(body, dict) else None
+    if isinstance(payload, dict):
+        return payload.get("json", payload)
+    return payload
 
 
 def report(label, key, ok, status, evidence):
@@ -181,8 +202,13 @@ def base64url(raw):
 
 
 def build_authorize_url(client_id, redirect_uri, scope, state, challenge):
-    """scope=None omits the parameter, letting Civitai apply whatever
-    permissions the application was registered with."""
+    """scope=None omits the parameter entirely.
+
+    Verified 2026-08-04: Civitai REJECTS that with
+    {"error":"invalid_scope","error_description":"Invalid scope value"}, so an
+    explicit bitmask is mandatory - the server will not fall back to the
+    permissions the application was registered with.
+    """
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -438,7 +464,7 @@ def probe_endpoints(token, run_posting):
             results[key] = "error"
 
     print("5. tRPC collection.getAllUser (the collections picker)")
-    owned_id = None
+    image_id = None
     for base, key in ((COM, "OAUTH_TRPC_COLLECTIONS_COM"), (RED, "OAUTH_TRPC_COLLECTIONS_RED")):
         try:
             r = trpc_get(fresh_session(base, bearer=token), base, "collection.getAllUser",
@@ -447,19 +473,32 @@ def probe_endpoints(token, run_posting):
             rows = data if isinstance(data, list) else (data or {}).get("items", []) \
                 if isinstance(data, dict) else []
             rows = [c for c in rows if isinstance(c, dict)]
-            if base == COM and rows:
-                owned = next((c for c in rows if c.get("isOwner")), rows[0])
-                owned_id = owned.get("id")
             report(f"collection.getAllUser on {base}", key,
                    r.status_code == 200 and len(rows) > 0, r.status_code,
-                   f"collections={len(rows)}, first={rows[0].get('name')!r}" if rows
-                   else "collections=0")
+                   f"collections={len(rows)}")
+            if base != COM or not rows:
+                continue
+            # This listing is the raw material for the C# picker, so show what
+            # it actually returns - the type field decides which entries are
+            # even scrapable.
+            print("       id       type        owner  name")
+            for c in rows[:15]:
+                print(f"       {str(c.get('id')):<8} {str(c.get('type')):<11} "
+                      f"{str(bool(c.get('isOwner'))):<6} {str(c.get('name'))[:40]}")
+            # Only Image collections hold images; picking an Article collection
+            # here is what made the first run report a false negative.
+            images = [c for c in rows if str(c.get("type", "")).lower() == "image"]
+            pick = next((c for c in images if c.get("isOwner")), None) or \
+                (images[0] if images else None)
+            if pick:
+                image_id = pick.get("id")
+                print(f"       -> image collection for probes 6-7: "
+                      f"{image_id} {pick.get('name')!r}")
         except Exception as e:
             print(f"  [ERROR] {e}")
             results[key] = "error"
 
-    collection_id = owned_id or get_config_collection_id()
-    print(f"   using collection id {collection_id} for probes 6-7")
+    collection_id = image_id or get_config_collection_id()
 
     print("6. tRPC collection.getById (collection metadata)")
     try:
@@ -476,10 +515,18 @@ def probe_endpoints(token, run_posting):
 
     print("7. tRPC image.getInfinite by collectionId, browsingLevel 31 (scraper core)")
     first_image_id = None
-    for base, key in ((RED, "OAUTH_IMAGES_RED"), (COM, "OAUTH_IMAGES_COM")):
+    # The config.yaml target is the workload that actually matters: an NSFW
+    # collection paged off civitai.red. Probe it alongside the picked one.
+    config_id = get_config_collection_id()
+    targets = [("picked", collection_id, RED, "OAUTH_IMAGES_RED"),
+               ("picked", collection_id, COM, "OAUTH_IMAGES_COM")]
+    if config_id and int(config_id) != int(collection_id):
+        targets += [("config.yaml", config_id, RED, "OAUTH_IMAGES_CONFIG_RED"),
+                    ("config.yaml", config_id, COM, "OAUTH_IMAGES_CONFIG_COM")]
+    for label, target_id, base, key in targets:
         try:
             r = trpc_get(fresh_session(base, bearer=token), base, "image.getInfinite", {
-                "collectionId": int(collection_id), "period": "AllTime", "sort": "Newest",
+                "collectionId": int(target_id), "period": "AllTime", "sort": "Newest",
                 "browsingLevel": 31, "include": ["cosmetics"], "disablePoi": True,
                 "disableMinor": False, "authed": True,
             }, timeout=30)
@@ -489,7 +536,7 @@ def probe_endpoints(token, run_posting):
             if items and first_image_id is None:
                 first_image_id = items[0].get("id")
             max_lvl = max((i.get("nsfwLevel", 0) for i in items), default=0)
-            report(f"image.getInfinite on {base}", key,
+            report(f"{label} collection {target_id} on {base}", key,
                    r.status_code == 200 and len(items) > 0, r.status_code,
                    f"items={len(items)}, max nsfwLevel={max_lvl}")
         except Exception as e:
@@ -538,19 +585,156 @@ def probe_endpoints(token, run_posting):
         results["OAUTH_POST_CREATE"] = "error"
 
 
+def load_cookies_into(session, host_base):
+    """Minimal Netscape cookies.txt loader (mirrors api_client.py behavior).
+
+    Returns the number of cookies loaded. Mirrors .civitai.com cookies onto the
+    target host so they are actually sent (requests matches cookie domains).
+    """
+    from http.cookiejar import Cookie
+
+    host = host_base.split("//", 1)[1]
+    candidates = [
+        SCRIPT_DIR / f"{host}_cookies.txt",
+        SCRIPT_DIR / "civitai.red_cookies.txt",
+        SCRIPT_DIR / "civitai.com_cookies.txt",
+    ]
+    cookie_file = next((c for c in candidates if c.exists()), None)
+    if cookie_file is None:
+        return 0
+
+    count = 0
+    with open(cookie_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip("\r\n")
+            if not line.strip():
+                continue
+            if line.startswith("#"):
+                if line.startswith("#HttpOnly_"):
+                    line = line[len("#HttpOnly_"):]
+                else:
+                    continue
+            parts = line.split("\t")
+            if len(parts) != 7:
+                continue
+            domain, _flag, path, secure, expiration, name, value = parts
+            domains = [domain]
+            bare = domain.lstrip(".")
+            if bare != host and not host.endswith("." + bare):
+                domains.append("." + host)
+            for d in domains:
+                try:
+                    expires = int(expiration) if expiration not in ("0", "") else None
+                except ValueError:
+                    expires = None
+                session.cookies.set_cookie(Cookie(
+                    version=0, name=name, value=value, port=None,
+                    port_specified=False, domain=d, domain_specified=True,
+                    domain_initial_dot=d.startswith("."), path=path or "/",
+                    path_specified=True, secure=secure == "TRUE", expires=expires,
+                    discard=False, comment=None, comment_url=None, rest={},
+                    rfc2109=False,
+                ))
+            count += 1
+    return count
+
+
+def diagnose_images(token, collection_id):
+    """Why does image.getInfinite return HTTP 200 with zero items on OAuth?
+
+    Separates the candidate causes: NSFW browsing-level gating, the `authed`
+    flag, the collectionId filter itself, or the endpoint simply not working
+    with a Bearer token. The cookie run at the end is the control - it uses the
+    path the scraper works with today.
+    """
+    cid = int(collection_id)
+    base_input = {
+        "collectionId": cid, "period": "AllTime", "sort": "Newest",
+        "browsingLevel": 31, "include": ["cosmetics"], "disablePoi": True,
+        "disableMinor": False, "authed": True,
+    }
+
+    def variant(name, changes, drop=()):
+        payload = dict(base_input)
+        payload.update(changes)
+        for field in drop:
+            payload.pop(field, None)
+        return name, payload
+
+    variants = [
+        variant("scraper default (browsingLevel=31, authed)", {}),
+        variant("browsingLevel=1 (PG only)", {"browsingLevel": 1}),
+        variant("no browsingLevel", {}, drop=("browsingLevel",)),
+        variant("no authed flag", {}, drop=("authed",)),
+        variant("minimal input (collectionId only)", {},
+                drop=("browsingLevel", "authed", "include", "disablePoi", "disableMinor")),
+        variant("no collectionId, browsingLevel=1 (endpoint control)",
+                {"browsingLevel": 1}, drop=("collectionId",)),
+        variant("no collectionId, browsingLevel=31",
+                {"browsingLevel": 31}, drop=("collectionId",)),
+    ]
+
+    print(f"\nIMAGE DIAGNOSIS on collection {cid} (Bearer token)")
+    for base in (RED, COM):
+        print(f"\n  --- {base} ---")
+        for name, payload in variants:
+            try:
+                r = trpc_get(fresh_session(base, bearer=token), base,
+                             "image.getInfinite", payload, timeout=30)
+                data = trpc_json(r)
+                if isinstance(data, dict):
+                    items = [i for i in data.get("items", []) if isinstance(i, dict)]
+                    keys = ",".join(sorted(data.keys()))[:60]
+                else:
+                    items, keys = [], f"payload_type={type(data).__name__}"
+                lvl = max((i.get("nsfwLevel", 0) for i in items), default=0)
+                print(f"    [{'PASS' if items else 'FAIL'}] {name}: HTTP {r.status_code}, "
+                      f"items={len(items)}, maxNsfw={lvl}, keys={keys}")
+                if not items and r.status_code != 200:
+                    print(f"           body: {(r.text or '')[:220]!r}")
+            except Exception as e:
+                print(f"    [ERROR] {name}: {e}")
+
+    print("\n  --- control: same scraper-default call with COOKIES, not Bearer ---")
+    for base in (RED, COM):
+        session = fresh_session(base)
+        n = load_cookies_into(session, base)
+        if n == 0:
+            print(f"    [SKIP] {base}: no cookies.txt found")
+            results[f"COOKIE_CONTROL_{base[-3:].upper()}"] = "skip"
+            continue
+        try:
+            r = trpc_get(session, base, "image.getInfinite", base_input, timeout=30)
+            data = trpc_json(r) or {}
+            items = [i for i in (data.get("items", []) if isinstance(data, dict) else [])
+                     if isinstance(i, dict)]
+            lvl = max((i.get("nsfwLevel", 0) for i in items), default=0)
+            report(f"cookies on {base} ({n} cookies)", f"COOKIE_CONTROL_{base[-3:].upper()}",
+                   r.status_code == 200 and len(items) > 0, r.status_code,
+                   f"items={len(items)}, maxNsfw={lvl}")
+        except Exception as e:
+            print(f"    [ERROR] {e}")
+            results[f"COOKIE_CONTROL_{base[-3:].upper()}"] = "error"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument("--client-id", default="",
                         help="Public OAuth client ID (or set CIVITAI_OAUTH_CLIENT_ID)")
     parser.add_argument("--redirect", default=DEFAULT_REDIRECT,
                         help=f"Exact redirect URI registered at Civitai (default {DEFAULT_REDIRECT})")
-    parser.add_argument("--scope", default="registered",
-                        help="'registered' (send no scope; use the app's registered "
-                             "permissions - the default and the safest), 'dt' "
-                             "(identity+media+collections), 'discover' (every bit), or an "
+    parser.add_argument("--scope", default="dt",
+                        help="'dt' (identity+media+collections, the default), 'discover' "
+                             "(every bit), 'registered' (send no scope at all - Civitai "
+                             "rejects this with invalid_scope, kept only to re-test), or an "
                              "explicit integer bitmask")
     parser.add_argument("--posting", action="store_true",
                         help="Also probe write access (creates then deletes a private draft post)")
+    parser.add_argument("--diagnose-images", metavar="COLLECTION_ID", nargs="?",
+                        const="config", default=None,
+                        help="After signing in, run an input matrix against image.getInfinite "
+                             "plus a cookie control, to explain zero-item results. Defaults to "
+                             "the first config.yaml collection.")
     args = parser.parse_args()
 
     client_id = (args.client_id or os.environ.get("CIVITAI_OAUTH_CLIENT_ID", "")).strip()
@@ -588,6 +772,10 @@ def main():
     if access:
         print()
         probe_endpoints(access, args.posting)
+        if args.diagnose_images is not None:
+            target = get_config_collection_id() if args.diagnose_images == "config" \
+                else args.diagnose_images
+            diagnose_images(access, target)
         print()
         probe_refresh(client_id, refresh)
     else:
