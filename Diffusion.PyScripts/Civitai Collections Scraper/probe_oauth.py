@@ -92,12 +92,18 @@ SCOPE_NAMES = {
     1: "Profile & Settings Read",
     4: "Models Read",
     32: "Media & Posts Read",
+    64: "Media & Posts Write",  # verified 2026-08-04: granted, and post.create succeeded
     131072: "Collections Read",
     262144: "Collections Write",
     524288: "Social Write",
     2097152: "Notifications Read",
     4194304: "Notifications Write",
 }
+
+# Media & Posts Delete is presumably 128 (the grid's third column), but that is
+# unverified - post.delete returns 403 without it, which strands the draft post
+# that --posting creates. See the warning printed by _probe_posting.
+MEDIA_WRITE_SCOPE = 64
 
 # What Diffusion Toolkit needs to read: identity + images + collections.
 DT_READ_SCOPE = 1 | 32 | 131072  # 131105
@@ -565,6 +571,9 @@ def probe_endpoints(token, run_posting):
         print("  [SKIP] run with --posting to include write probes")
         results["OAUTH_POST_CREATE"] = "skip"
         return
+    print("  WARNING: post.delete needs Media & Posts DELETE permission, which the")
+    print("  recommended registration does not grant. Without it the draft post this")
+    print("  creates cannot be removed by the probe and must be deleted by hand.")
     try:
         session = fresh_session(RED, bearer=token)
         r = trpc_post(session, RED, "post.create", {"authed": True})
