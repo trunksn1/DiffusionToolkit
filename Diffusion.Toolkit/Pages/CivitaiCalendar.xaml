@@ -21,8 +21,13 @@
         <!-- Fixed colours rather than theme brushes: these have to stay legible
              against both the light and dark cell backgrounds, and the alpha
              channel does the blending. -->
-        <SolidColorBrush x:Key="TodayBrush" Color="#3B9EFF"/>
-        <SolidColorBrush x:Key="TodayBackgroundBrush" Color="#333B9EFF"/>
+        <!-- Today is blue, the cell being examined is green: two different hues,
+             so "where am I" and "what is today" never have to be told apart by
+             thickness alone. Both are heavier than the 1px default. -->
+        <SolidColorBrush x:Key="TodayBrush" Color="#2E8BFF"/>
+        <SolidColorBrush x:Key="TodayBackgroundBrush" Color="#382E8BFF"/>
+        <SolidColorBrush x:Key="SelectedDayBrush" Color="#22C55E"/>
+        <SolidColorBrush x:Key="SelectedDayBackgroundBrush" Color="#3322C55E"/>
         <SolidColorBrush x:Key="OutOfRangeBrush" Color="#26808080"/>
     </pages:NavigationPage.Resources>
 
@@ -69,6 +74,32 @@
                               ToolTip="Show or hide the day detail panel"/>
                 <ToggleButton Content="Preview" IsChecked="{Binding ShowPreviewPanel}" Padding="10,2" Margin="4,0,0,0"
                               ToolTip="Show or hide the image preview panel"/>
+            </StackPanel>
+
+            <!-- Legend: three cell states that are otherwise guessable only by colour. -->
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,0,14,0">
+                <StackPanel.Resources>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="10"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="Margin" Value="3,0,10,0"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+                        <Setter Property="Opacity" Value="0.75"/>
+                    </Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Width" Value="11"/>
+                        <Setter Property="Height" Value="11"/>
+                        <Setter Property="BorderThickness" Value="2"/>
+                        <Setter Property="CornerRadius" Value="2"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+                </StackPanel.Resources>
+                <Border BorderBrush="{StaticResource TodayBrush}" Background="{StaticResource TodayBackgroundBrush}"/>
+                <TextBlock Text="Today"/>
+                <Border BorderBrush="{StaticResource SelectedDayBrush}" Background="{StaticResource SelectedDayBackgroundBrush}"/>
+                <TextBlock Text="Viewing"/>
+                <Border BorderBrush="{StaticResource ScheduledBrush}" Background="Transparent"/>
+                <TextBlock Text="Queued"/>
             </StackPanel>
         </DockPanel>
 
@@ -161,16 +192,20 @@
                                                 <Setter Property="BorderBrush" Value="{StaticResource ScheduledBrush}"/>
                                                 <Setter Property="BorderThickness" Value="2"/>
                                             </DataTrigger>
-                                            <!-- After HasScheduled so today always keeps its own border;
-                                                 before IsSelected so selecting today still reads as selected. -->
+                                            <!-- After HasScheduled so today always keeps its own border. -->
                                             <DataTrigger Binding="{Binding IsToday}" Value="True">
                                                 <Setter Property="BorderBrush" Value="{StaticResource TodayBrush}"/>
-                                                <Setter Property="BorderThickness" Value="2"/>
+                                                <Setter Property="BorderThickness" Value="3"/>
                                                 <Setter Property="Background" Value="{StaticResource TodayBackgroundBrush}"/>
                                                 <Setter Property="Opacity" Value="1"/>
                                             </DataTrigger>
+                                            <!-- Last: the cell you are examining outranks everything else,
+                                                 including today, and keeps a hue of its own. -->
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource SelectedBackgroundBrush}"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource SelectedDayBrush}"/>
+                                                <Setter Property="BorderThickness" Value="3"/>
+                                                <Setter Property="Background" Value="{StaticResource SelectedDayBackgroundBrush}"/>
+                                                <Setter Property="Opacity" Value="1"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -195,10 +230,11 @@
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                        <TextBlock DockPanel.Dock="Left" Text="TODAY" FontSize="8" FontWeight="Bold"
-                                                   Margin="4,3,0,0" VerticalAlignment="Top"
-                                                   Foreground="{StaticResource TodayBrush}"
-                                                   Visibility="{Binding IsToday, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        <Border DockPanel.Dock="Left" CornerRadius="3" Padding="4,1" Margin="5,2,0,0"
+                                                VerticalAlignment="Top" Background="{StaticResource TodayBrush}"
+                                                Visibility="{Binding IsToday, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="TODAY" FontSize="8" FontWeight="Bold" Foreground="White"/>
+                                        </Border>
                                         <TextBlock DockPanel.Dock="Right" Text="🔒" FontSize="9" Margin="0,0,2,0"
                                                    Foreground="{DynamicResource ForegroundBrush}" Opacity="0.7"
                                                    ToolTip="{Binding ScheduleLimitTooltip}"
@@ -331,10 +367,10 @@
                                             <!-- Compact engagement: totals only, this row is narrow.
                                                  The full breakdown lives in the preview panel below. -->
                                             <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                                                        ToolTip="{Binding StatsTooltip}"
                                                         Visibility="{Binding HasStats, Converter={StaticResource BoolToVisibilityConverter}}">
                                                 <TextBlock FontSize="11" Margin="0,0,8,0"
                                                            Foreground="{DynamicResource ForegroundBrush}" Opacity="0.75"
-                                                           ToolTip="Total reactions"
                                                            Visibility="{Binding HasReactions, Converter={StaticResource BoolToVisibilityConverter}}">
                                                     <Run Text="♥"/><Run Text=" "/><Run Text="{Binding ReactionSummary, Mode=OneWay}"/>
                                                 </TextBlock>
@@ -359,7 +395,12 @@
                                                        Visibility="{Binding IsAmbiguous, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                             <TextBlock Text="✗ no local file matched — use ⬇ Download missing or Open on CivitAI" FontSize="10"
                                                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.5"
+                                                       TextWrapping="Wrap"
                                                        Visibility="{Binding IsUnmatched, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                            <TextBlock Text="CivitAI stored no filename for this image, so it can never match by name — download it to get a copy."
+                                                       FontSize="10" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource ForegroundBrush}" Opacity="0.5"
+                                                       Visibility="{Binding HasNoName, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         </StackPanel>
                                       </DockPanel>
                                     </Border>
@@ -387,7 +428,7 @@
                              zeroes; counters the fetch never reported are absent, not 0. -->
                         <Border DockPanel.Dock="Top" Margin="0,0,0,4" Padding="6,3" CornerRadius="3"
                                 Background="{DynamicResource ControlBackgroundBrush}"
-                                DataContext="{Binding SelectedImage}"
+                                DataContext="{Binding SelectedImage}" ToolTip="{Binding StatsTooltip}"
                                 Visibility="{Binding HasStats, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}">
                             <WrapPanel>
                                 <WrapPanel.Resources>
@@ -418,6 +459,11 @@
                                            Visibility="{Binding HasViews, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <TextBlock Text="No reactions, comments or tips yet." FontStyle="Italic" Opacity="0.5"
                                            Visibility="{Binding HasNoEngagement, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <!-- Says so on screen, not only in the tooltip: these are the
+                                     post's totals shared by every image in it, and they carry
+                                     no tip or view counts. -->
+                                <TextBlock Text="(post totals)" FontStyle="Italic" Opacity="0.45"
+                                           Visibility="{Binding StatsArePostWide, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             </WrapPanel>
                         </Border>
 

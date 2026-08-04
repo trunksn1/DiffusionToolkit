@@ -99,9 +99,29 @@ def _trpc_mutate(client, procedure: str, input_json: Dict[str, Any], timeout=30,
                              json=body, timeout=timeout)
 
 
+try:
+    # CivitAI is mid-migration between two tRPC response shapes: the legacy
+    # {"result":{"data":{"json":...}}} wrapper and a reference table delivered
+    # as a JSON *string*. post.getInfinite still returns the first,
+    # image.getInfinite already returns the second - parsing only the legacy
+    # shape silently yielded None for every image.getInfinite call.
+    from api_client import _extract_trpc_json as _shipped_extract
+except Exception:  # pragma: no cover - keep working if the import moves
+    _shipped_extract = None
+
+
 def _trpc_json(resp) -> Any:
     try:
-        return resp.json().get("result", {}).get("data", {}).get("json")
+        body = resp.json()
+    except Exception:
+        return None
+    if _shipped_extract is not None:
+        try:
+            return _shipped_extract(body)
+        except Exception:
+            pass
+    try:
+        return body.get("result", {}).get("data", {}).get("json")
     except Exception:
         return None
 
@@ -146,12 +166,47 @@ def _resolve_username(client, explicit: Optional[str]) -> str:
         "'posts: username:' in config.yaml.")
 
 
-def _extract_post_images(client, post: Dict[str, Any], warnings: List[str]) -> List[Dict[str, Any]]:
+def _fetch_image_stats(client, post_id, warnings: List[str]) -> Dict[Any, Dict[str, int]]:
+    """Per-image stats for one post, keyed by image id.
+
+    Costs one request per post, which is why it is opt-in (--image-stats).
+    Worth it for recent posts: measured 2026-08-04, only the image-level block
+    carries tips and views - the post-level block has neither.
+    """
+    if post_id is None:
+        return {}
+    try:
+        resp = _trpc_query(client, "image.getInfinite",
+                           {"postId": post_id, "pending": True, "limit": 100, "authed": True})
+        if resp.status_code != 200:
+            warnings.append(f"image stats HTTP {resp.status_code} for post {post_id}")
+            return {}
+        data = _trpc_json(resp) or {}
+        items = data.get("items", []) if isinstance(data, dict) else []
+        time.sleep(PAGE_DELAY_SECONDS)
+    except Exception as e:
+        warnings.append(f"image stats fetch failed for post {post_id}: {e}")
+        return {}
+
+    stats: Dict[Any, Dict[str, int]] = {}
+    for img in items:
+        if not isinstance(img, dict) or img.get("id") is None:
+            continue
+        found = _extract_stats(img)
+        if found:
+            stats[img["id"]] = found
+    return stats
+
+
+def _extract_post_images(client, post: Dict[str, Any], warnings: List[str],
+                         want_image_stats: bool = False) -> List[Dict[str, Any]]:
     """Images from the post item itself, else a per-post image.getInfinite call."""
     raw = post.get("images")
     items: List[Dict[str, Any]] = []
+    inline = False
     if isinstance(raw, list) and raw and isinstance(raw[0], dict):
         items = raw
+        inline = True
     else:
         post_id = post.get("id")
         if post_id is None:
@@ -166,6 +221,20 @@ def _extract_post_images(client, post: Dict[str, Any], warnings: List[str]) -> L
             warnings.append(f"images fetch failed for post {post_id}: {e}")
             return []
 
+    # Where engagement numbers come from, measured live 2026-08-04:
+    #  - post.getInfinite items carry a POST-level stats block (like/dislike/
+    #    heart/laugh/cry/comment/collected). Free - it is already in the
+    #    response we paged - but it has no tips and no views, and it describes
+    #    the post as a whole, so every image of a multi-image post shares it.
+    #  - The images INLINE in that response carry no stats at all. Reading only
+    #    those is why the first version of this cached nothing.
+    #  - image.getInfinite carries per-image stats WITH tippedAmountCount and
+    #    viewCount, at the cost of one request per post.
+    # So: post-level always, per-image when asked for.
+    post_stats = _extract_stats(post)
+    per_image = _fetch_image_stats(client, post.get("id"), warnings) \
+        if (want_image_stats and inline) else {}
+
     images = []
     for img in items:
         if not isinstance(img, dict) or img.get("id") is None:
@@ -178,9 +247,14 @@ def _extract_post_images(client, post: Dict[str, Any], warnings: List[str]) -> L
             "height": img.get("height"),
             "nsfwLevel": img.get("nsfwLevel"),
         }
-        stats = _extract_stats(img)
+        # Prefer the image's own numbers; fall back to the post's.
+        stats = per_image.get(img["id"]) or _extract_stats(img)
+        scope = "image"
+        if not stats:
+            stats, scope = post_stats, "post"
         if stats:
             entry["stats"] = stats
+            entry["statsScope"] = scope
         images.append(entry)
     return images
 
@@ -465,8 +539,15 @@ def _fetch_future_posts(client, username: str, warnings: List[str],
 
 def fetch_posts(client, config: dict, username: Optional[str],
                 range_from: datetime.date, range_to: datetime.date,
-                existing_cache: Optional[dict], progress=None) -> dict:
-    """Build the cache dict. Incremental when existing_cache is provided."""
+                existing_cache: Optional[dict], progress=None,
+                want_image_stats: bool = False) -> dict:
+    """Build the cache dict. Incremental when existing_cache is provided.
+
+    want_image_stats adds one request per post to pick up tips and views, which
+    only the per-image stats block reports. Suitable for the bounded incremental
+    fetch; a full history rebuild would multiply it by every post ever made, so
+    that path takes the free post-level numbers instead.
+    """
     warnings: List[str] = []
     _emit(progress, "Signing in to CivitAI…")
     username = _resolve_username(client, username)  # raises if unknown - never fetch the world
@@ -564,7 +645,7 @@ def fetch_posts(client, config: dict, username: Optional[str],
             # scheduled time has already passed without the post going public.
             "scheduled": post.get("id") in queued_ids or published > now_utc,
             "title": post.get("title"),
-            "images": _extract_post_images(client, post, warnings),
+            "images": _extract_post_images(client, post, warnings, want_image_stats),
         })
 
     # A kept post is dropped only when this run actually produced a replacement

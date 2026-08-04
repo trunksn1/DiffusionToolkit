@@ -88,7 +88,11 @@ public class CivitaiPostsService
     public Task<PythonResult> FetchUpcomingAsync(Action<string>? onProgress = null, CancellationToken cancellationToken = default)
     {
         var firstOfMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        return RunPythonAsync($"main.py posts --from {firstOfMonth:yyyy-MM-dd}{UsernameArgument()}",
+        // --image-stats costs one request per post in range, which is bounded
+        // here (a month or so) and is the only source of tip and view counts.
+        // RecoverHistory deliberately omits it: over years of posts it would
+        // add thousands of requests.
+        return RunPythonAsync($"main.py posts --from {firstOfMonth:yyyy-MM-dd} --image-stats{UsernameArgument()}",
             onProgress, cancellationToken);
     }
 
@@ -325,11 +329,13 @@ public class CivitaiPostsService
         var folder = Path.Combine(root, PostedFolderName);
         Directory.CreateDirectory(folder);
 
-        // One download per CivitAI image id; needs the CDN key (Url) and a name.
+        // One download per CivitAI image id. Only the CDN key (Url) is required:
+        // CivitAI does not always store a filename, and those nameless images are
+        // exactly the ones that can never match a local file — excluding them here
+        // would tell the user to press a button that cannot help them.
         var targets = resolved
             .Where(r => r.Status == MatchStatus.Unmatched
-                        && !string.IsNullOrWhiteSpace(r.Url)
-                        && !string.IsNullOrWhiteSpace(r.Name))
+                        && !string.IsNullOrWhiteSpace(r.Url))
             .GroupBy(r => r.CivitaiImageId)
             .Select(g => g.First())
             .ToList();
@@ -341,10 +347,16 @@ public class CivitaiPostsService
             var image = targets[i];
             onProgress?.Invoke($"Downloading missing images: {i + 1} of {targets.Count}…");
 
-            var fileName = SanitizeFileName(image.Name!);
-            if (!Path.HasExtension(fileName)) fileName += ".jpeg";
-            var target = Path.Combine(folder, fileName);
-            if (File.Exists(target))
+            // Nameless images get a stable, identifiable name from their CivitAI id.
+            var named = !string.IsNullOrWhiteSpace(image.Name);
+            var fileName = SanitizeFileName(named ? image.Name! : $"civitai-{image.CivitaiImageId}");
+
+            // With a name we know the extension up front and can skip an
+            // already-downloaded file without touching the network. Without one
+            // the extension comes from the response, so the existence check
+            // happens after the request instead.
+            if (named && !Path.HasExtension(fileName)) fileName += ".jpeg";
+            if (named && File.Exists(Path.Combine(folder, fileName)))
             {
                 skipped++;
                 continue;
@@ -354,7 +366,21 @@ public class CivitaiPostsService
             {
                 // original=true returns the file as uploaded (original format).
                 var url = $"{CdnPrefix}/{image.Url}/original=true/{Uri.EscapeDataString(fileName)}";
-                var bytes = await DownloadClient.GetByteArrayAsync(url, cancellationToken);
+                using var response = await DownloadClient.GetAsync(url, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                if (!Path.HasExtension(fileName))
+                {
+                    fileName += ExtensionFor(response.Content.Headers.ContentType?.MediaType);
+                }
+                var target = Path.Combine(folder, fileName);
+                if (File.Exists(target))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
                 await File.WriteAllBytesAsync(target, bytes, cancellationToken);
                 downloaded++;
             }
@@ -371,6 +397,21 @@ public class CivitaiPostsService
 
         return (downloaded, skipped, failed, folder);
     }
+
+    /// <summary>
+    /// File extension for a CDN response's media type. CivitAI posts can hold
+    /// video as well as stills, so this is not jpeg-only.
+    /// </summary>
+    private static string ExtensionFor(string? mediaType) => mediaType?.ToLowerInvariant() switch
+    {
+        "image/png" => ".png",
+        "image/jpeg" or "image/jpg" => ".jpeg",
+        "image/webp" => ".webp",
+        "image/gif" => ".gif",
+        "video/mp4" => ".mp4",
+        "video/webm" => ".webm",
+        _ => ".jpeg"
+    };
 
     private static string SanitizeFileName(string name)
     {
@@ -484,6 +525,7 @@ public class CivitaiPostsService
                     PublishedAtUtc = publishedAtUtc,
                     Scheduled = post.Scheduled,
                     Stats = image.Stats,
+                    StatsScope = image.StatsScope,
                 };
 
                 var candidates = FindCandidates(matchesByName, image);
@@ -661,6 +703,13 @@ public class CivitaiPostImage
     /// Null means "unknown", never "zero".
     /// </summary>
     public CivitaiImageStats? Stats { get; set; }
+
+    /// <summary>
+    /// "image" when the counters are this image's own (and include tips and
+    /// views), "post" when they are the post's totals shared by every image in
+    /// it. Surfaced in the UI so shared numbers aren't read as per-image ones.
+    /// </summary>
+    public string? StatsScope { get; set; }
 }
 
 /// <summary>
@@ -748,6 +797,14 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
     public bool IsAmbiguous => Status == MatchStatus.Ambiguous;
     public bool IsUnmatched => Status == MatchStatus.Unmatched;
 
+    /// <summary>
+    /// CivitAI did not store a filename for this image. Filename is the only
+    /// thing the matcher has to go on, so these can never match a local file
+    /// however many times the library is rescanned — downloading is the only
+    /// way to get a copy.
+    /// </summary>
+    public bool HasNoName => string.IsNullOrWhiteSpace(Name);
+
     // --- Engagement -------------------------------------------------------
     //
     // Pre-formatted for the calendar templates: the chips are hidden when a
@@ -756,9 +813,18 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
     // fetch, not live - the panel's "Last updated" line is the caveat.
 
     public CivitaiImageStats? Stats { get; set; }
+    public string? StatsScope { get; set; }
 
     /// <summary>False when the fetch reported no counters at all (unknown, not zero).</summary>
     public bool HasStats => Stats != null;
+
+    /// <summary>True when the numbers are the post's totals, not this image's own.</summary>
+    public bool StatsArePostWide => StatsScope == "post";
+
+    public string StatsTooltip => StatsArePostWide
+        ? "Totals for the whole post. Tips and views need a per-image fetch — "
+          + "use ↻ Fetch Upcoming, which requests them for recent posts."
+        : "Counts for this image.";
 
     /// <summary>Compact summary for the day list: total reactions.</summary>
     public string ReactionSummary => (Stats?.TotalReactions ?? 0).ToString();

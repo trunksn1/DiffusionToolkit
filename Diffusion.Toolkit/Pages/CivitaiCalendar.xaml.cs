@@ -227,6 +227,16 @@ namespace Diffusion.Toolkit.Pages
                 day.IsSelected = true;
                 LoadThumbnails(day.Images);
             }
+
+            // The preview belongs to the selected day. Moving to a day that
+            // doesn't contain it - an empty day, or any other day before its
+            // own image is picked - must empty the panel, or the old image
+            // reads as if it were posted on the newly selected day.
+            if (_model.SelectedImage != null
+                && (day == null || !day.Images.Contains(_model.SelectedImage)))
+            {
+                ClearImageSelection();
+            }
         }
 
         /// <summary>Cap on mini-thumbnails inside a month cell; the rest shows as a "+N" badge.</summary>
@@ -454,8 +464,9 @@ namespace Diffusion.Toolkit.Pages
         {
             if (sender is FrameworkElement fe && fe.Tag is CalendarDayModel day)
             {
+                // SelectDay drops any preview that doesn't belong to this day,
+                // so an empty day leaves the preview panel empty.
                 SelectDay(day);
-                // Auto-preview the first image of the day, if any.
                 var firstImage = day.Images.FirstOrDefault();
                 if (firstImage != null)
                 {
@@ -470,6 +481,16 @@ namespace Diffusion.Toolkit.Pages
             {
                 _ = SelectImageAsync(image);
             }
+        }
+
+        /// <summary>
+        /// Empties the preview panel and drops the current image selection.
+        /// </summary>
+        private void ClearImageSelection()
+        {
+            if (_model.SelectedImage != null) _model.SelectedImage.IsSelected = false;
+            _model.SelectedImage = null;
+            _model.PreviewImage = null;
         }
 
         /// <summary>

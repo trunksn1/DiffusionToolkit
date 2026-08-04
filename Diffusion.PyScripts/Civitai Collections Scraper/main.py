@@ -521,7 +521,8 @@ def cmd_posts(args, orchestrator: DownloadOrchestrator, config: dict):
             orchestrator.api_client, config,
             username=username,
             range_from=range_from, range_to=range_to,
-            existing_cache=existing, progress=emit_progress)
+            existing_cache=existing, progress=emit_progress,
+            want_image_stats=args.image_stats)
     except PermissionError as e:
         print(json_module.dumps({"error": "auth", "message": str(e)}), file=real_stdout)
         sys.exit(2)
@@ -676,6 +677,9 @@ Examples:
                               help='Cache file path (default: AppData DiffusionToolkit/Civitai/posts_cache.json)')
     posts_parser.add_argument('--username', type=str, default=None,
                               help='CivitAI username (default: resolved via API key)')
+    posts_parser.add_argument('--image-stats', action='store_true',
+                              help='Also fetch per-image stats (adds tips and views, '
+                                   'at one extra request per post)')
 
     schedule_parser = subparsers.add_parser('schedule-post',
                                             help='Create a scheduled CivitAI post from local images')
