@@ -13,7 +13,7 @@ namespace Diffusion.Toolkit
     /// counters are fetched over the same period as the posts they belong to —
     /// and the expensive one needs its cost spelled out before it is picked.
     /// </summary>
-    public partial class CivitaiDownloadWindow : Window
+    public partial class CivitaiDownloadWindow : BorderlessWindow
     {
         /// <summary>Fetch the post list (dates, titles, queue state).</summary>
         public bool FetchPosts { get; private set; }

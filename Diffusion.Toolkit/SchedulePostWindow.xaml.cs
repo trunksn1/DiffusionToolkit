@@ -5,7 +5,7 @@ using System.Windows;
 
 namespace Diffusion.Toolkit
 {
-    public partial class SchedulePostWindow : Window
+    public partial class SchedulePostWindow : BorderlessWindow
     {
         public DateTime PublishAt { get; private set; }
         public string? PostTitle { get; private set; }

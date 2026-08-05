@@ -1,25 +1,47 @@
-<Window x:Class="Diffusion.Toolkit.CivitaiDownloadWindow"
+<local:BorderlessWindow x:Class="Diffusion.Toolkit.CivitaiDownloadWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Download from CivitAI" Height="620" Width="560"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        Background="{DynamicResource BackgroundBrush}">
+        xmlns:local="clr-namespace:Diffusion.Toolkit"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        MenuWidth="0"
+        TitleWidth="*"
+        WindowStyle="ToolWindow"
+        Style="{StaticResource BorderlessWindowStyle}"
+        Title="Download from CivitAI" Height="600" Width="580">
     <Window.Resources>
-        <!-- Every option is a heading plus a plain-language cost line: the
-             expensive choices here are expensive in requests, not in seconds,
-             and that is invisible unless it is written down. -->
-        <Style x:Key="OptionHeading" TargetType="TextBlock">
+        <!-- The app's implicit TextBlock style sets Background and alignment but
+             NO Foreground, so an unqualified TextBlock renders black — unreadable
+             on this theme's navy. Re-declaring it here, BasedOn the app's, makes
+             every TextBlock in this window readable by default instead of relying
+             on each one remembering. Do not set colours literally: the theme
+             switches at runtime, so it has to be DynamicResource. -->
+        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+        <Style x:Key="SectionHeading" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style x:Key="OptionHeading" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
-        <Style x:Key="OptionDetail" TargetType="TextBlock">
+        <!-- Secondary text is dimmed with Opacity over the SAME foreground brush,
+             never with a hardcoded grey: a grey that reads on the dark theme
+             disappears on the light one. -->
+        <Style x:Key="OptionDetail" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Opacity" Value="0.75"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Margin" Value="21,1,0,10"/>
-            <Setter Property="Opacity" Value="0.7"/>
+            <Setter Property="Margin" Value="22,2,0,12"/>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="16">
+    <Grid Margin="16,28,16,16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -31,11 +53,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,12"
+        <TextBlock Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,14"
                    Text="Pick what to bring down from CivitAI. You can tick more than one — they run one after another."/>
 
         <!-- What to download -->
-        <TextBlock Grid.Row="1" Text="What to download" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="1" Text="What to download" Style="{StaticResource SectionHeading}"/>
 
         <StackPanel Grid.Row="2">
             <CheckBox x:Name="PostsCheck" IsChecked="True" Checked="Option_Changed" Unchecked="Option_Changed">
@@ -58,15 +80,15 @@
         </StackPanel>
 
         <!-- Period -->
-        <TextBlock Grid.Row="3" Text="How far back" FontSize="14" FontWeight="SemiBold" Margin="0,4,0,8"/>
+        <TextBlock Grid.Row="3" Text="How far back" Style="{StaticResource SectionHeading}" Margin="0,6,0,8"/>
 
         <StackPanel Grid.Row="4">
             <StackPanel Orientation="Horizontal">
-                <ComboBox x:Name="PeriodCombo" Width="230" SelectionChanged="Period_Changed"/>
+                <ComboBox x:Name="PeriodCombo" Width="240" SelectionChanged="Period_Changed"/>
                 <DatePicker x:Name="CustomDate" Width="150" Margin="8,0,0,0" Visibility="Collapsed"
                             SelectedDateChanged="Option_Changed"/>
             </StackPanel>
-            <TextBlock TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,6,0,10"
+            <TextBlock Style="{StaticResource OptionDetail}" Margin="0,8,0,12"
                        Text="Applies to the posts and the engagement counters. Posts scheduled for the future are always fetched in full, whatever you choose here. Missing image files are downloaded for everything already in the calendar."/>
 
             <CheckBox x:Name="RebuildCheck" Checked="Option_Changed" Unchecked="Option_Changed">
@@ -77,15 +99,15 @@
         </StackPanel>
 
         <!-- Cost summary -->
-        <Border Grid.Row="6" Padding="10,7" CornerRadius="3" Margin="0,4,0,12"
+        <Border Grid.Row="6" Padding="10,8" CornerRadius="3" Margin="0,4,0,14"
                 Background="{DynamicResource ControlBackgroundBrush}"
-                BorderBrush="{DynamicResource NormalBorderBrush}" BorderThickness="1">
+                BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" FontSize="11"/>
         </Border>
 
         <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Cancel" Click="Cancel_Click" Padding="14,4" Margin="0,0,8,0" IsCancel="True"/>
-            <Button x:Name="DownloadButton" Content="Download" Click="Download_Click" Padding="14,4" IsDefault="True"/>
+            <Button Content="Cancel" Click="Cancel_Click" Padding="16,4" Margin="0,0,8,0" IsCancel="True"/>
+            <Button x:Name="DownloadButton" Content="Download" Click="Download_Click" Padding="16,4" IsDefault="True"/>
         </StackPanel>
     </Grid>
-</Window>
+</local:BorderlessWindow>

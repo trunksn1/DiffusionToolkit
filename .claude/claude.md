@@ -238,7 +238,24 @@ UnicodeEncodeError: 'charmap' codec can't encode characters in position 31-32
 
 **Future Improvement:** Consider using embedded Python for production releases.
 
-### 6. WPF Local Values Beat Style Triggers
+### 6. Unreadable Text in New Windows — READ `UI_GUIDELINES.md` FIRST
+
+**Before writing any XAML**, read `UI_GUIDELINES.md` in the repo root. The two
+traps that have actually shipped:
+
+- The implicit `TextBlock` style in `Themes/Common.xaml` sets **no
+  `Foreground`**, so a plain `TextBlock` is black — invisible on the dark theme.
+  CheckBox/RadioButton *labels* get a colour from their control template, so
+  half a window can look fine while the paragraphs are unreadable.
+- **`BackgroundBrush` and `MahApps.Brushes.*` do not exist** in this app.
+  `BackgroundBrush` looks like it works because the implicit `Grid` style paints
+  `PrimaryBrush` anyway. Grep `Themes/` before trusting a resource key.
+
+Dialogs are `local:BorderlessWindow` + `Style="{StaticResource BorderlessWindowStyle}"`,
+never bare `Window`. Verify with the render harness described in the guidelines
+— both themes — before reporting a UI change as done.
+
+### 7. WPF Local Values Beat Style Triggers
 
 **Problem:** A DataTrigger in a `Style` silently does nothing when the same
 property is also set as an attribute on the element. Local values sit above
@@ -254,7 +271,7 @@ out-of-month cells correctly. That split is the tell.
 local value on the element before doubting the binding. Defaults belong in
 `Style` setters.
 
-### 7. CivitAI Sometimes Stores No Filename
+### 8. CivitAI Sometimes Stores No Filename
 
 **Problem:** posts submitted through a **challenge page** come back with
 `name: null` on every image, plus an empty `metadata` block — verified 2026-08-05
@@ -269,7 +286,7 @@ never be matched to the file that was uploaded.
 and `ResolveMatches`/`MatchNameFor` (when looking it up). Download → rescan →
 matched. Changing one side without the other silently breaks the loop.
 
-### 8. Scheduling Limits Come From CivitAI's Source
+### 9. Scheduling Limits Come From CivitAI's Source
 
 `SchedulePostModal.tsx` in `civitai/civitai`: max is `dayjs().add(3, 'month')` —
 3 **calendar** months, not 90 days — and the floor is

@@ -1,10 +1,23 @@
-<Window x:Class="Diffusion.Toolkit.SchedulePostWindow"
+<local:BorderlessWindow x:Class="Diffusion.Toolkit.SchedulePostWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Schedule CivitAI Post" Height="310" Width="420"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        Background="{DynamicResource BackgroundBrush}">
-    <Grid Margin="16">
+        xmlns:local="clr-namespace:Diffusion.Toolkit"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        MenuWidth="0"
+        TitleWidth="*"
+        WindowStyle="ToolWindow"
+        Style="{StaticResource BorderlessWindowStyle}"
+        Title="Schedule CivitAI Post" Height="330" Width="480">
+    <Window.Resources>
+        <!-- The app's implicit TextBlock style sets no Foreground, so plain
+             TextBlocks render black on the navy theme. Re-declare it once per
+             window rather than per element. -->
+        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="16,28,16,16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -15,8 +28,8 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="Image:" FontWeight="SemiBold"/>
-        <TextBlock Grid.Row="1" x:Name="FileNameText" TextTrimming="CharacterEllipsis" Margin="0,2,0,10"
-                   Foreground="{DynamicResource MahApps.Brushes.Gray1}"/>
+        <TextBlock Grid.Row="1" x:Name="FileNameText" TextTrimming="CharacterEllipsis"
+                   Margin="0,2,0,10" Opacity="0.75"/>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,10">
             <StackPanel Margin="0,0,16,0">
@@ -36,12 +49,13 @@
         <StackPanel Grid.Row="3">
             <TextBlock Text="Title (optional)" FontWeight="SemiBold"/>
             <TextBox x:Name="TitlePart" Margin="0,2,0,0"/>
-            <TextBlock x:Name="LimitText" TextWrapping="Wrap" FontSize="11" Margin="0,8,0,0" Opacity="0.7"/>
+            <TextBlock x:Name="LimitText" TextWrapping="Wrap" FontSize="11"
+                       Margin="0,10,0,0" Opacity="0.75"/>
         </StackPanel>
 
         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Cancel" Click="Cancel_Click" Padding="14,4" Margin="0,0,8,0" IsCancel="True"/>
-            <Button Content="Schedule" Click="Schedule_Click" Padding="14,4" IsDefault="True"/>
+            <Button Content="Cancel" Click="Cancel_Click" Padding="16,4" Margin="0,0,8,0" IsCancel="True"/>
+            <Button Content="Schedule" Click="Schedule_Click" Padding="16,4" IsDefault="True"/>
         </StackPanel>
     </Grid>
-</Window>
+</local:BorderlessWindow>
