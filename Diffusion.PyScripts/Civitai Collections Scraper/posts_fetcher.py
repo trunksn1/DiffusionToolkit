@@ -235,6 +235,13 @@ def _extract_post_images(client, post: Dict[str, Any], warnings: List[str],
     per_image = _fetch_image_stats(client, post.get("id"), warnings) \
         if (want_image_stats and inline) else {}
 
+    # NOTE on "name": some ingestion paths discard the uploaded filename and it
+    # comes back None. Verified 2026-08-05 on a post submitted through a
+    # challenge page: every endpoint reports name=None and an empty metadata
+    # block for its images, while an ordinary post from the same account keeps
+    # both. Nothing to do here - the name genuinely does not exist server-side -
+    # but Diffusion Toolkit matches library files by name, so it falls back to a
+    # "civitai-{id}" stem for these (see CivitaiPostsService.NamelessStem).
     images = []
     for img in items:
         if not isinstance(img, dict) or img.get("id") is None:

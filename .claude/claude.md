@@ -238,6 +238,46 @@ UnicodeEncodeError: 'charmap' codec can't encode characters in position 31-32
 
 **Future Improvement:** Consider using embedded Python for production releases.
 
+### 6. WPF Local Values Beat Style Triggers
+
+**Problem:** A DataTrigger in a `Style` silently does nothing when the same
+property is also set as an attribute on the element. Local values sit above
+style triggers in WPF's dependency-property precedence.
+
+**Where it bit us:** the calendar's day cell (`Pages/CivitaiCalendar.xaml`) set
+`BorderBrush` / `Background` / `BorderThickness` on the `Border` *and* in its
+`IsToday` / `IsSelected` triggers. Today and the selected day looked identical
+to every other cell — while `Opacity`, which had no local value, dimmed
+out-of-month cells correctly. That split is the tell.
+
+**Rule:** if a cell's trigger appears to run but change nothing, look for a
+local value on the element before doubting the binding. Defaults belong in
+`Style` setters.
+
+### 7. CivitAI Sometimes Stores No Filename
+
+**Problem:** posts submitted through a **challenge page** come back with
+`name: null` on every image, plus an empty `metadata` block — verified 2026-08-05
+across `post.getInfinite` and `image.getInfinite`, authenticated and anonymous.
+An ordinary post from the same account keeps both.
+
+**Impact:** the calendar matches library files by filename, so those images can
+never be matched to the file that was uploaded.
+
+**Solution:** one deterministic stem, `CivitaiPostsService.NamelessStem(id)` =
+`civitai-{id}`, used by *both* `DownloadMissingAsync` (when writing the file)
+and `ResolveMatches`/`MatchNameFor` (when looking it up). Download → rescan →
+matched. Changing one side without the other silently breaks the loop.
+
+### 8. Scheduling Limits Come From CivitAI's Source
+
+`SchedulePostModal.tsx` in `civitai/civitai`: max is `dayjs().add(3, 'month')` —
+3 **calendar** months, not 90 days — and the floor is
+`POST_MINIMUM_SCHEDULE_MINUTES = 60`, so "in the future" is not enough
+validation. Both are mirrored in `CivitaiPostsService`
+(`MaxScheduleMonthsAhead` / `MinScheduleMinutesAhead` and the derived dates and
+messages) and must be read from there, never re-hardcoded at a call site.
+
 ---
 
 ## Development Guidelines

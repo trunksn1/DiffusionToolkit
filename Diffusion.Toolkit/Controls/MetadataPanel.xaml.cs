@@ -139,16 +139,14 @@ namespace Diffusion.Toolkit.Controls
             int hour = ScheduleHour.SelectedIndex >= 0 ? ScheduleHour.SelectedIndex : 12;
             int minute = ScheduleMinute.SelectedItem is string ms && int.TryParse(ms, out var m) ? m : 0;
             var publishAt = ScheduleDate.SelectedDate.Value.Date.AddHours(hour).AddMinutes(minute);
-            if (publishAt <= DateTime.Now)
+            if (publishAt < CivitaiPostsService.EarliestSchedulableTime)
             {
-                ScheduleStatusText.Text = "The scheduled time must be in the future.";
+                ScheduleStatusText.Text = CivitaiPostsService.ScheduleFloorMessage;
                 return;
             }
             if (publishAt.Date > CivitaiPostsService.LastSchedulableDate)
             {
-                ScheduleStatusText.Text =
-                    $"CivitAI only accepts posts up to {CivitaiPostsService.MaxScheduleDaysAhead} days ahead " +
-                    $"(through {CivitaiPostsService.LastSchedulableDate:d}).";
+                ScheduleStatusText.Text = CivitaiPostsService.ScheduleLimitMessage;
                 return;
             }
 

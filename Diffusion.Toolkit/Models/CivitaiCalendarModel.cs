@@ -124,10 +124,10 @@ public class CivitaiCalendarModel : BaseNotify
     public ICommand? PrevMonthCommand { get; set; }
     public ICommand? NextMonthCommand { get; set; }
     public ICommand? TodayCommand { get; set; }
-    public ICommand? FetchUpcomingCommand { get; set; }
-    public ICommand? RecoverHistoryCommand { get; set; }
     public ICommand? CancelFetchCommand { get; set; }
-    public ICommand? DownloadMissingCommand { get; set; }
+
+    /// <summary>Opens the one dialog that covers every kind of CivitAI fetch.</summary>
+    public ICommand? DownloadCommand { get; set; }
 }
 
 public class CalendarDayModel : BaseNotify
@@ -139,15 +139,13 @@ public class CalendarDayModel : BaseNotify
 
     /// <summary>
     /// True for days CivitAI will not accept a scheduled post on (more than
-    /// <see cref="CivitaiPostsService.MaxScheduleDaysAhead"/> days out). The
+    /// <see cref="CivitaiPostsService.MaxScheduleMonthsAhead"/> months out). The
     /// calendar greys these and refuses drops on them, so the ceiling is
     /// visible before an upload fails against it.
     /// </summary>
     public bool IsBeyondScheduleLimit => Date.Date > CivitaiPostsService.LastSchedulableDate;
 
-    public string ScheduleLimitTooltip =>
-        $"CivitAI only accepts posts scheduled up to {CivitaiPostsService.MaxScheduleDaysAhead} days ahead " +
-        $"(through {CivitaiPostsService.LastSchedulableDate:d}).";
+    public string ScheduleLimitTooltip => CivitaiPostsService.ScheduleLimitMessage;
 
     private bool _isSelected;
     public bool IsSelected

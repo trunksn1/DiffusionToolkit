@@ -67,6 +67,10 @@ refreshes the token and passes it as `CIVITAI_ACCESS_TOKEN`. On the Python side
   (`CivitaiPostsService.cs:265-322`). No credential of any kind is sent, by
   design. Unaffected by OAuth, works signed-in or not. ✅
 
+> These three buttons have since been merged into one `⬇ Download…` dialog (see
+> "The Download dialog" below). The credential story per operation is unchanged
+> — only which button starts it.
+
 ### Gap A1 — username resolution can't use OAuth (blocking for key-less users)
 
 `posts_fetcher._resolve_username` (`posts_fetcher.py:101-132`) tries, in order:
@@ -405,20 +409,90 @@ Each step is independently shippable and leaves the API-key path working.
 
 Added after the original plan, both purely local (no network, no fetch):
 
-- **Today** now reads at a glance: a blue 2px border, a tinted cell background,
-  the day number in bold blue, and a small `TODAY` label. The trigger sits after
-  `HasScheduled` so today always keeps its own border, and before `IsSelected`
-  so selecting today still looks selected. It follows the system date via
-  `DateTime.Today`, evaluated when the month is built.
-- **Beyond +90 days** is greyed (`OutOfRangeBrush`, reduced opacity) with a 🔒
-  glyph and a tooltip naming the exact last schedulable date. CivitAI rejects
-  publish dates past that window, so the ceiling is now visible before an
-  upload fails against it. The limit lives in one place —
-  `CivitaiPostsService.MaxScheduleDaysAhead` / `LastSchedulableDate` — and is
+- **Today** reads at a glance: a blue 3px border, a tinted cell background, the
+  day number in bold blue, and a small `TODAY` label. **The day being viewed**
+  gets the same treatment in green, plus a green dot beside the day number. The
+  trigger order is `HasScheduled` → `IsToday` → `IsSelected`, so the day you are
+  looking at always wins the border while today keeps its `TODAY` chip — the two
+  never collapse into one ambiguous cell.
+
+  **The precedence trap:** the first version of this set `BorderBrush`,
+  `Background` and `BorderThickness` as attributes on the cell `Border` *and*
+  in the triggers. A local value outranks every Style trigger in WPF, so the
+  triggers ran and changed nothing — only `Opacity`, which had no local value,
+  ever moved. The defaults now live in `Style` setters. If a day-cell trigger
+  ever "does nothing" again, look for a local value on the element first.
+
+- **Beyond the scheduling ceiling** is greyed (`OutOfRangeBrush`, reduced
+  opacity) with a 🔒 glyph and a tooltip naming the exact last schedulable date.
+
+  The ceiling is **3 calendar months**, not 90 days. From civitai's own
+  `SchedulePostModal.tsx`: `maxDate = increaseDate(now, 3, 'months')`, i.e.
+  `dayjs().add(3, 'month')`. The same file enforces a **floor** of
+  `POST_MINIMUM_SCHEDULE_MINUTES = 60` — a post must be at least an hour out,
+  so "in the future" is not sufficient validation. Both are client-side in
+  civitai's form; no server-side max was found in `post.service.ts`, but
+  matching the form is the right call — it is what a user's own browser would
+  allow. Verified against `civitai/civitai@main` on 2026-08-05.
+
+  Both limits live in one place — `CivitaiPostsService.MaxScheduleMonthsAhead` /
+  `MinScheduleMinutesAhead`, with `LastSchedulableDate`,
+  `EarliestSchedulableTime` and the two shared message strings — and are
   enforced in four: the month cell styling, drag-over and drop on the calendar,
   `SchedulePostWindow`, and the metadata panel's Schedule tab (both the date
   picker's `DisplayDateEnd` and the submit-time check, since a picker limit
   alone is not a validation).
+
+## Images CivitAI kept no filename for
+
+Matching a posted image to a library file is done by filename, which is all
+CivitAI gives us. Some ingestion paths throw the filename away.
+
+Measured 2026-08-05 against post `30113552`, submitted through a challenge
+page: every one of its images comes back with `name: null` and a `metadata`
+block holding only `nsfwLevelReason`, from `post.getInfinite`, from
+`image.getInfinite`, authenticated and anonymous alike. An ordinary post from
+the same account carries both the filename and a full `metadata` block
+(`hash`, `size`, `width`, `height`). So the name is genuinely absent
+server-side, not something a different endpoint or credential would reveal.
+
+Consequence: **the file you uploaded can never be matched** for those images —
+there is nothing to match it against. What can be matched is a copy downloaded
+from CivitAI, so both ends use one deterministic stem,
+`CivitaiPostsService.NamelessStem(id)` = `civitai-{id}`:
+
+- `DownloadMissingAsync` writes the file under that stem.
+- `ResolveMatches` looks nameless images up under that stem
+  (`MatchNameFor`), extension-tolerantly, like any other name.
+
+So the loop closes: Download → rescan → matched, tagged `Posted`, previewable
+in-app. Before this, downloading a nameless image left it permanently unmatched
+and the calendar kept telling the user it could never match — after they had
+already done the only thing that would fix it.
+
+## The Download dialog
+
+The header used to carry three buttons (Fetch Upcoming, Recover History,
+Download missing). They are one `⬇ Download…` button opening
+`CivitaiDownloadWindow`, because the choices are not independent: engagement
+counters are fetched over the same period as the posts they belong to, and the
+period selector would otherwise have had to be duplicated per button.
+
+- **What**: posts and scheduled queue · engagement counters · missing image
+  files. Any combination; they run in that order, and a failed or cancelled
+  fetch stops the chain rather than downloading against stale matches.
+- **How far back**: 7 days · 30 days · 6 months · 1 year · everything (since
+  the founding) · a date you pick. Applies to the first two only; the future
+  queue is always fetched whole, and missing files are downloaded for whatever
+  is already in the calendar.
+- **Rebuild from scratch** maps to `--full`, replacing what Recover History did.
+- Each option states its request cost in the dialog, and the summary box
+  restates it for the actual selection. Engagement is one request *per post* —
+  invisible unless it is written down, and the reason it stays opt-in.
+
+`FetchUpcomingAsync` survives as the post-scheduling refresh (current month,
+with engagement); everything else goes through `FetchPostsAsync(from,
+withEngagement, rebuild)`.
 
 ## Risks
 

@@ -41,10 +41,8 @@ namespace Diffusion.Toolkit.Pages
             _model.PrevMonthCommand = new RelayCommand<object>(_ => ShiftMonth(-1));
             _model.NextMonthCommand = new RelayCommand<object>(_ => ShiftMonth(1));
             _model.TodayCommand = new RelayCommand<object>(_ => GoToMonth(new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1)));
-            _model.FetchUpcomingCommand = new RelayCommand<object>(async _ => await FetchUpcomingAsync());
-            _model.RecoverHistoryCommand = new RelayCommand<object>(_ => RecoverHistory());
             _model.CancelFetchCommand = new RelayCommand<object>(_ => _fetchCts?.Cancel());
-            _model.DownloadMissingCommand = new RelayCommand<object>(async _ => await DownloadMissingAsync());
+            _model.DownloadCommand = new RelayCommand<object>(_ => ShowDownloadDialog());
 
             _model.PropertyChanged += (_, args) =>
             {
@@ -340,26 +338,61 @@ namespace Diffusion.Toolkit.Pages
                 "Checking for upcoming posts…");
         }
 
-        private void RecoverHistory()
+        /// <summary>
+        /// The single ⬇ Download entry point: asks what to fetch and over what
+        /// period, then runs the chosen steps in order.
+        /// </summary>
+        private void ShowDownloadDialog()
         {
-            var dialog = new HistoryRangeWindow { Owner = Window.GetWindow(this) };
+            if (_model.IsRefreshing) return;
+
+            var missing = _resolved.Count(r => r.IsUnmatched && !string.IsNullOrWhiteSpace(r.Url));
+            var dialog = new CivitaiDownloadWindow(missing) { Owner = Window.GetWindow(this) };
             if (dialog.ShowDialog() != true) return;
-            var from = dialog.FromDate;
-            _ = RunFetchAsync(
-                (onProgress, ct) => _service.RecoverHistoryAsync(from, onProgress, ct),
-                $"Recovering history from {from:MMMM yyyy}…");
+
+            _ = RunDownloadAsync(dialog);
+        }
+
+        /// <summary>
+        /// Runs the dialog's selections in sequence: the post/engagement fetch
+        /// first, then the file downloads — that order matters, because the
+        /// fetch is what reveals which images are missing in the first place.
+        /// </summary>
+        private async Task RunDownloadAsync(CivitaiDownloadWindow choices)
+        {
+            if (choices.FetchPosts || choices.FetchEngagement)
+            {
+                var from = choices.FromDate;
+                var status = choices.FetchEngagement
+                    ? $"Fetching posts and engagement counters since {from:d}…"
+                    : $"Fetching posts since {from:d}…";
+                var ok = await RunFetchAsync(
+                    (onProgress, ct) => _service.FetchPostsAsync(
+                        from, choices.FetchEngagement, choices.Rebuild, onProgress, ct),
+                    status);
+                // A failed or canceled fetch leaves the match list stale, so the
+                // download step would work from numbers the user never saw.
+                if (!ok) return;
+            }
+
+            if (choices.DownloadMissingFiles)
+            {
+                await DownloadMissingAsync();
+            }
         }
 
         /// <summary>
         /// Shared fetch runner: disables the buttons, streams the Python script's
         /// live progress into the status line, then reloads and rebuilds the month.
         /// Cancel kills the Python process; the run then unwinds silently.
+        /// Returns false when the fetch did not complete, so a caller chaining
+        /// further steps onto it can stop.
         /// </summary>
-        private async Task RunFetchAsync(
+        private async Task<bool> RunFetchAsync(
             Func<Action<string>, System.Threading.CancellationToken, Task<PythonResult>> run,
             string initialStatus)
         {
-            if (_model.IsRefreshing) return;
+            if (_model.IsRefreshing) return false;
             using var cts = new System.Threading.CancellationTokenSource();
             _fetchCts = cts;
             _model.IsRefreshing = true;
@@ -374,23 +407,24 @@ namespace Diffusion.Toolkit.Pages
                 var result = await run(OnProgress, cts.Token);
                 if (result.IsCanceled)
                 {
-                    return;
+                    return false;
                 }
                 if (result.IsAuthFailure)
                 {
                     MessageBox.Show(Window.GetWindow(this), CivitaiPostsService.AuthFailureMessage,
                         "Authentication Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
+                    return false;
                 }
                 if (!result.Success)
                 {
                     MessageBox.Show(Window.GetWindow(this),
                         $"Failed to fetch posts:\n{result.Message}",
                         "Fetch Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
+                    return false;
                 }
                 _model.StatusText = "Matching to your library…";
                 await LoadCacheAndBuildAsync();
+                return true;
             }
             finally
             {
@@ -404,6 +438,9 @@ namespace Diffusion.Toolkit.Pages
         /// Downloads posted images that have no local match into
         /// "&lt;first root folder&gt;\Posted", then prompts for a folder rescan
         /// so they enter the library (the next refresh then matches + tags them).
+        ///
+        /// The Download dialog has already named the count and the destination,
+        /// so this does not ask again.
         /// </summary>
         private async Task DownloadMissingAsync()
         {
@@ -412,12 +449,6 @@ namespace Diffusion.Toolkit.Pages
             if (missing == 0)
             {
                 ServiceLocator.ToastService?.Toast("No missing images to download — everything is matched locally.", "CivitAI");
-                return;
-            }
-            if (MessageBox.Show(Window.GetWindow(this),
-                    $"Download {missing} posted image(s) that are not in your library into the 'Posted' subfolder of your first root folder?",
-                    "Download Missing", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
-            {
                 return;
             }
 

@@ -43,17 +43,9 @@
         <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,8">
             <Label Content="CivitAI Calendar" FontSize="22" FontWeight="DemiBold" DockPanel.Dock="Left"
                    Foreground="{DynamicResource ForegroundBrush}"/>
-            <Button Content="↻ Fetch Upcoming" Command="{Binding FetchUpcomingCommand}" DockPanel.Dock="Right"
+            <Button Content="⬇ Download…" Command="{Binding DownloadCommand}" DockPanel.Dock="Right"
                     Padding="12,4" Margin="6,0,0,0"
-                    ToolTip="Quickly check this month and the next 3 months for newly scheduled posts."
-                    IsEnabled="{Binding IsRefreshing, Converter={StaticResource InverseBoolConverter}}"/>
-            <Button Content="⟲ Recover History…" Command="{Binding RecoverHistoryCommand}" DockPanel.Dock="Right"
-                    Padding="12,4" Margin="6,0,0,0"
-                    ToolTip="Rebuild the full history of your posts, back to a date you choose."
-                    IsEnabled="{Binding IsRefreshing, Converter={StaticResource InverseBoolConverter}}"/>
-            <Button Content="⬇ Download missing" Command="{Binding DownloadMissingCommand}" DockPanel.Dock="Right"
-                    Padding="12,4" Margin="6,0,0,0"
-                    ToolTip="Download posted images that are not in your library into the 'Posted' subfolder of your first root folder."
+                    ToolTip="Choose what to fetch from CivitAI: posts, engagement counters, or the image files missing from your library."
                     IsEnabled="{Binding IsRefreshing, Converter={StaticResource InverseBoolConverter}}"/>
             <TextBlock Text="{Binding LastUpdated}" DockPanel.Dock="Right" VerticalAlignment="Center"
                        ToolTip="Reaction, comment and tip counts are a snapshot from this fetch, not live."
@@ -124,7 +116,7 @@
                     BorderBrush="{DynamicResource NormalBorderBrush}" BorderThickness="1"
                     Visibility="{Binding HasCache, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                 <TextBlock FontSize="12" Foreground="{DynamicResource ForegroundBrush}" Opacity="0.8"
-                           Text="No CivitAI posts loaded yet — use ↻ Fetch Upcoming for your queue, or ⟲ Recover History for the full archive."/>
+                           Text="No CivitAI posts loaded yet — press ⬇ Download… and pick how far back to fetch."/>
             </Border>
         </StackPanel>
 
@@ -169,14 +161,23 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="1" BorderThickness="1" CornerRadius="2"
-                                    BorderBrush="{DynamicResource NormalBorderBrush}"
-                                    Background="{DynamicResource ControlBackgroundBrush}"
+                            <Border Margin="1" CornerRadius="2"
                                     MouseLeftButtonUp="DayCell_Click" AllowDrop="True"
                                     Drop="DayCell_Drop" DragOver="DayCell_DragOver"
                                     Tag="{Binding}" ClipToBounds="True">
                                 <Border.Style>
                                     <Style TargetType="Border">
+                                        <!-- The plain-cell look is set HERE, not as local
+                                             attributes on the Border. A local value beats
+                                             every Style trigger in WPF's property
+                                             precedence, so with BorderBrush/Background/
+                                             BorderThickness written on the element the
+                                             triggers below ran but changed nothing, and
+                                             today and the viewed day looked like every
+                                             other cell. -->
+                                        <Setter Property="BorderThickness" Value="1"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource NormalBorderBrush}"/>
+                                        <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                                 <Setter Property="Opacity" Value="0.35"/>
@@ -200,7 +201,9 @@
                                                 <Setter Property="Opacity" Value="1"/>
                                             </DataTrigger>
                                             <!-- Last: the cell you are examining outranks everything else,
-                                                 including today, and keeps a hue of its own. -->
+                                                 including today, and keeps a hue of its own. When it IS
+                                                 today, the green border wins but the TODAY chip stays, so
+                                                 the two never collapse into one ambiguous cell. -->
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                                 <Setter Property="BorderBrush" Value="{StaticResource SelectedDayBrush}"/>
                                                 <Setter Property="BorderThickness" Value="3"/>
@@ -226,6 +229,11 @@
                                                             <Setter Property="FontWeight" Value="Bold"/>
                                                             <Setter Property="Foreground" Value="{StaticResource TodayBrush}"/>
                                                         </DataTrigger>
+                                                        <!-- After today, matching the border's priority. -->
+                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                            <Setter Property="FontWeight" Value="Bold"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource SelectedDayBrush}"/>
+                                                        </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </TextBlock.Style>
@@ -235,6 +243,13 @@
                                                 Visibility="{Binding IsToday, Converter={StaticResource BoolToVisibilityConverter}}">
                                             <TextBlock Text="TODAY" FontSize="8" FontWeight="Bold" Foreground="White"/>
                                         </Border>
+                                        <!-- A filled dot rather than a second word: the cell header is
+                                             narrow and a "VIEWING" chip next to "TODAY" would push the
+                                             image count off the clipped edge. -->
+                                        <Ellipse DockPanel.Dock="Left" Width="7" Height="7" Margin="5,5,0,0"
+                                                 VerticalAlignment="Top" Fill="{StaticResource SelectedDayBrush}"
+                                                 ToolTip="The day shown in the panel on the right"
+                                                 Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         <TextBlock DockPanel.Dock="Right" Text="🔒" FontSize="9" Margin="0,0,2,0"
                                                    Foreground="{DynamicResource ForegroundBrush}" Opacity="0.7"
                                                    ToolTip="{Binding ScheduleLimitTooltip}"
@@ -365,20 +380,31 @@
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="11"
                                                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.7"/>
                                             <!-- Compact engagement: totals only, this row is narrow.
-                                                 The full breakdown lives in the preview panel below. -->
+                                                 The full breakdown lives in the preview panel below.
+                                                 Comments and collections show a real 0 once the
+                                                 per-image numbers are in, and stay hidden while all
+                                                 we have is the post-wide block, which cannot tell a
+                                                 zero apart from a counter it never reported. -->
                                             <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
                                                         ToolTip="{Binding StatsTooltip}"
                                                         Visibility="{Binding HasStats, Converter={StaticResource BoolToVisibilityConverter}}">
                                                 <TextBlock FontSize="11" Margin="0,0,8,0"
                                                            Foreground="{DynamicResource ForegroundBrush}" Opacity="0.75"
+                                                           ToolTip="Reactions"
                                                            Visibility="{Binding HasReactions, Converter={StaticResource BoolToVisibilityConverter}}">
                                                     <Run Text="♥"/><Run Text=" "/><Run Text="{Binding ReactionSummary, Mode=OneWay}"/>
                                                 </TextBlock>
                                                 <TextBlock FontSize="11" Margin="0,0,8,0"
                                                            Foreground="{DynamicResource ForegroundBrush}" Opacity="0.75"
                                                            ToolTip="Comments"
-                                                           Visibility="{Binding HasComments, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                           Visibility="{Binding ShowComments, Converter={StaticResource BoolToVisibilityConverter}}">
                                                     <Run Text="💬"/><Run Text=" "/><Run Text="{Binding CommentSummary, Mode=OneWay}"/>
+                                                </TextBlock>
+                                                <TextBlock FontSize="11" Margin="0,0,8,0"
+                                                           Foreground="{DynamicResource ForegroundBrush}" Opacity="0.75"
+                                                           ToolTip="Times this image was collected"
+                                                           Visibility="{Binding ShowCollected, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Run Text="🗂"/><Run Text=" "/><Run Text="{Binding CollectedSummary, Mode=OneWay}"/>
                                                 </TextBlock>
                                                 <TextBlock Text="no reactions yet" FontSize="10" FontStyle="Italic"
                                                            Foreground="{DynamicResource ForegroundBrush}" Opacity="0.4"
@@ -393,14 +419,14 @@
                                             <TextBlock Text="⚠ multiple local matches — best candidate shown in preview" FontSize="10"
                                                        Foreground="{StaticResource ScheduledBrush}"
                                                        Visibility="{Binding IsAmbiguous, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                            <TextBlock Text="✗ no local file matched — use ⬇ Download missing or Open on CivitAI" FontSize="10"
+                                            <TextBlock Text="✗ no local file matched — use ⬇ Download… or Open on CivitAI" FontSize="10"
                                                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.5"
                                                        TextWrapping="Wrap"
                                                        Visibility="{Binding IsUnmatched, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                            <TextBlock Text="CivitAI stored no filename for this image, so it can never match by name — download it to get a copy."
+                                            <TextBlock Text="{Binding NamelessHint}"
                                                        FontSize="10" TextWrapping="Wrap"
                                                        Foreground="{DynamicResource ForegroundBrush}" Opacity="0.5"
-                                                       Visibility="{Binding HasNoName, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                       Visibility="{Binding NeedsNamelessDownload, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         </StackPanel>
                                       </DockPanel>
                                     </Border>
@@ -449,12 +475,17 @@
                                            Visibility="{Binding HasCries, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <TextBlock Text="{Binding DislikeText}" ToolTip="Dislikes"
                                            Visibility="{Binding HasDislikes, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <!-- After the five reactions: comments, collections, then the
+                                     Buzz tipped on this image. All three show a real 0 once the
+                                     per-image fetch has run, and are hidden entirely while only
+                                     post-wide totals are known — those carry no Buzz at all, so
+                                     a "⚡ 0" built from them would be a number we do not have. -->
                                 <TextBlock Text="{Binding CommentText}" ToolTip="Comments"
-                                           Visibility="{Binding HasComments, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                           Visibility="{Binding ShowComments, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <TextBlock Text="{Binding CollectedText}" ToolTip="Times collected"
-                                           Visibility="{Binding HasCollected, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                <TextBlock Text="{Binding TippedText}" ToolTip="Buzz tipped"
-                                           Visibility="{Binding HasTips, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                           Visibility="{Binding ShowCollected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding TippedText}" ToolTip="Buzz tipped on this image"
+                                           Visibility="{Binding ShowTips, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <TextBlock Text="{Binding ViewText}" ToolTip="Views"
                                            Visibility="{Binding HasViews, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <TextBlock Text="No reactions, comments or tips yet." FontStyle="Italic" Opacity="0.5"

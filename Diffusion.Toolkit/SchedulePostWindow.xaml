@@ -1,7 +1,7 @@
 <Window x:Class="Diffusion.Toolkit.SchedulePostWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Schedule CivitAI Post" Height="260" Width="420"
+        Title="Schedule CivitAI Post" Height="310" Width="420"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="{DynamicResource BackgroundBrush}">
     <Grid Margin="16">
@@ -36,6 +36,7 @@
         <StackPanel Grid.Row="3">
             <TextBlock Text="Title (optional)" FontWeight="SemiBold"/>
             <TextBox x:Name="TitlePart" Margin="0,2,0,0"/>
+            <TextBlock x:Name="LimitText" TextWrapping="Wrap" FontSize="11" Margin="0,8,0,0" Opacity="0.7"/>
         </StackPanel>
 
         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">

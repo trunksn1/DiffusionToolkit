@@ -71,28 +71,68 @@ public class CivitaiPostsService
     public static readonly DateTime CivitaiFounding = new(2022, 11, 1);
 
     /// <summary>
-    /// How far ahead CivitAI accepts a scheduled publish date. Posts dated
-    /// beyond this are rejected, so the calendar greys those days out and the
-    /// schedule pickers stop there.
+    /// How far ahead CivitAI accepts a scheduled publish date, taken from its
+    /// own SchedulePostModal: <c>dayjs(now).add(3, 'month')</c>. Three CALENDAR
+    /// months, not 90 days — the two differ by up to two days depending on the
+    /// month, and a date past the ceiling is rejected by the form.
     /// </summary>
-    public const int MaxScheduleDaysAhead = 90;
-
-    /// <summary>The last date a post may be scheduled for, in local time.</summary>
-    public static DateTime LastSchedulableDate => DateTime.Today.AddDays(MaxScheduleDaysAhead);
+    public const int MaxScheduleMonthsAhead = 3;
 
     /// <summary>
-    /// Quick refresh: fetches the current month through +3 months, looking for
-    /// newly drafted/scheduled future posts. Incremental — keeps existing history
-    /// in the cache and only re-scans recent + future posts.
+    /// The floor CivitAI puts under a scheduled publish date
+    /// (<c>POST_MINIMUM_SCHEDULE_MINUTES</c> in its constants): a post must be
+    /// at least an hour out. "In the future" is not enough.
+    /// </summary>
+    public const int MinScheduleMinutesAhead = 60;
+
+    /// <summary>The last date a post may be scheduled for, in local time.</summary>
+    public static DateTime LastSchedulableDate => DateTime.Today.AddMonths(MaxScheduleMonthsAhead);
+
+    /// <summary>The earliest instant a post may be scheduled for, in local time.</summary>
+    public static DateTime EarliestSchedulableTime => DateTime.Now.AddMinutes(MinScheduleMinutesAhead);
+
+    /// <summary>Shared wording for the ceiling, quoted by every schedule picker.</summary>
+    public static string ScheduleLimitMessage =>
+        $"CivitAI only accepts posts scheduled up to {MaxScheduleMonthsAhead} months ahead " +
+        $"(through {LastSchedulableDate:d}).";
+
+    /// <summary>Shared wording for the floor.</summary>
+    public static string ScheduleFloorMessage =>
+        $"CivitAI requires a scheduled post to be at least {MinScheduleMinutesAhead} minutes " +
+        $"in the future (from {EarliestSchedulableTime:t}).";
+
+    /// <summary>
+    /// Fetches posts published from <paramref name="fromDate"/> onwards (plus
+    /// the future queue, which is always fetched whole) into the cache.
+    ///
+    /// <paramref name="withEngagement"/> adds --image-stats: one extra request
+    /// per post in range, and the only source of Buzz tips, view counts, and
+    /// per-image (rather than post-wide) reaction/comment/collection numbers.
+    /// It is opt-in because over a long range it dominates the cost.
+    ///
+    /// <paramref name="rebuild"/> discards the cached history instead of
+    /// merging into it — the escape hatch for a cache that looks wrong.
+    /// </summary>
+    public Task<PythonResult> FetchPostsAsync(DateTime fromDate, bool withEngagement, bool rebuild,
+        Action<string>? onProgress = null, CancellationToken cancellationToken = default)
+    {
+        if (fromDate < CivitaiFounding) fromDate = CivitaiFounding;
+        var arguments = new StringBuilder($"main.py posts --from {fromDate:yyyy-MM-dd}");
+        if (rebuild) arguments.Append(" --full");
+        if (withEngagement) arguments.Append(" --image-stats");
+        arguments.Append(UsernameArgument());
+        return RunPythonAsync(arguments.ToString(), onProgress, cancellationToken);
+    }
+
+    /// <summary>
+    /// Quick refresh used after scheduling a post from inside the app: current
+    /// month onwards, with engagement, so the new post appears immediately.
+    /// Bounded to a month or so, which is what makes --image-stats affordable.
     /// </summary>
     public Task<PythonResult> FetchUpcomingAsync(Action<string>? onProgress = null, CancellationToken cancellationToken = default)
     {
         var firstOfMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        // --image-stats costs one request per post in range, which is bounded
-        // here (a month or so) and is the only source of tip and view counts.
-        // RecoverHistory deliberately omits it: over years of posts it would
-        // add thousands of requests.
-        return RunPythonAsync($"main.py posts --from {firstOfMonth:yyyy-MM-dd} --image-stats{UsernameArgument()}",
+        return FetchPostsAsync(firstOfMonth, withEngagement: true, rebuild: false,
             onProgress, cancellationToken);
     }
 
@@ -112,17 +152,6 @@ public class CivitaiPostsService
         if (string.IsNullOrWhiteSpace(username)) return "";
         // Defensive: a name with a quote would break argument parsing.
         return $" --username \"{username.Replace("\"", "")}\"";
-    }
-
-    /// <summary>
-    /// Full history recovery from <paramref name="fromDate"/> (clamped to CivitAI's
-    /// founding) through +3 months. Replaces the cache wholesale.
-    /// </summary>
-    public Task<PythonResult> RecoverHistoryAsync(DateTime fromDate, Action<string>? onProgress = null, CancellationToken cancellationToken = default)
-    {
-        if (fromDate < CivitaiFounding) fromDate = CivitaiFounding;
-        return RunPythonAsync($"main.py posts --full --from {fromDate:yyyy-MM-dd}{UsernameArgument()}",
-            onProgress, cancellationToken);
     }
 
     /// <summary>
@@ -297,6 +326,20 @@ public class CivitaiPostsService
     // CivitAI's public image CDN prefix (present in every civitai image URL).
     private const string CdnPrefix = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA";
 
+    /// <summary>
+    /// The filename stem used for an image CivitAI kept no name for.
+    ///
+    /// Some ingestion paths discard the uploaded filename — verified 2026-08-05
+    /// against a post submitted through a challenge page, whose images come back
+    /// with name=null and an empty metadata block from every endpoint, while an
+    /// ordinary post from the same account keeps both. Filename is all the
+    /// matcher has, so those images can never be matched to the file that was
+    /// uploaded. Downloading is the way out, and the download must land on a
+    /// name the matcher can find again — hence one deterministic stem, used by
+    /// both <see cref="DownloadMissingAsync"/> and <see cref="ResolveMatches"/>.
+    /// </summary>
+    public static string NamelessStem(long civitaiImageId) => $"civitai-{civitaiImageId}";
+
     /// <summary>Small CDN preview URL for a CivitAI image (its Url field is the CDN key).</summary>
     public static string CdnThumbnailUrl(string cdnKey, string? name, int width = 96) =>
         $"{CdnPrefix}/{cdnKey}/width={width}/{Uri.EscapeDataString(string.IsNullOrWhiteSpace(name) ? "image.jpeg" : name)}";
@@ -347,9 +390,11 @@ public class CivitaiPostsService
             var image = targets[i];
             onProgress?.Invoke($"Downloading missing images: {i + 1} of {targets.Count}…");
 
-            // Nameless images get a stable, identifiable name from their CivitAI id.
+            // Nameless images get a stable, identifiable name from their CivitAI
+            // id — the same stem ResolveMatches looks for, so the copy matches
+            // once the library has been rescanned.
             var named = !string.IsNullOrWhiteSpace(image.Name);
-            var fileName = SanitizeFileName(named ? image.Name! : $"civitai-{image.CivitaiImageId}");
+            var fileName = SanitizeFileName(named ? image.Name! : NamelessStem(image.CivitaiImageId));
 
             // With a name we know the extension up front and can skip an
             // already-downloaded file without touching the network. Without one
@@ -490,6 +535,10 @@ public class CivitaiPostsService
     /// Matches every CivitAI image in the cache to local library files:
     /// exact filename (extension-tolerant) → width/height filter →
     /// UserMetadata SourceUrl containing /images/{id} → Ambiguous/Unmatched.
+    ///
+    /// Images CivitAI kept no name for are looked up under
+    /// <see cref="NamelessStem"/> instead, which finds the copy the Download
+    /// step wrote for them.
     /// </summary>
     public List<ResolvedPostImage> ResolveMatches(CivitaiPostsCache cache)
     {
@@ -499,12 +548,11 @@ public class CivitaiPostsService
 
         var allNames = cache.Posts
             .SelectMany(p => p.Images ?? new List<CivitaiPostImage>())
-            .Select(i => i.Name)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(MatchNameFor)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var matchesByName = dataStore.GetImagesByFileNames(allNames!)
+        var matchesByName = dataStore.GetImagesByFileNames(allNames)
             .GroupBy(m => Path.GetFileNameWithoutExtension(m.FileName), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
@@ -562,19 +610,25 @@ public class CivitaiPostsService
         return resolved;
     }
 
+    /// <summary>
+    /// The filename this image is matched under: its own, or the deterministic
+    /// stem a nameless image's downloaded copy carries.
+    /// </summary>
+    private static string MatchNameFor(CivitaiPostImage image) =>
+        string.IsNullOrWhiteSpace(image.Name) ? NamelessStem(image.Id) : image.Name!;
+
     private static List<ImageFileMatch> FindCandidates(
         Dictionary<string, List<ImageFileMatch>> matchesByName, CivitaiPostImage image)
     {
-        if (string.IsNullOrWhiteSpace(image.Name)) return new List<ImageFileMatch>();
-
-        var stem = Path.GetFileNameWithoutExtension(image.Name);
+        var matchName = MatchNameFor(image);
+        var stem = Path.GetFileNameWithoutExtension(matchName);
         if (!matchesByName.TryGetValue(stem, out var candidates))
         {
             return new List<ImageFileMatch>();
         }
 
         // Prefer exact filename (with extension) over stem-only matches.
-        var exact = candidates.Where(c => string.Equals(c.FileName, image.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        var exact = candidates.Where(c => string.Equals(c.FileName, matchName, StringComparison.OrdinalIgnoreCase)).ToList();
         var pool = exact.Count > 0 ? exact : candidates;
 
         // Dimension filter when CivitAI reports dimensions.
@@ -798,12 +852,21 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
     public bool IsUnmatched => Status == MatchStatus.Unmatched;
 
     /// <summary>
-    /// CivitAI did not store a filename for this image. Filename is the only
-    /// thing the matcher has to go on, so these can never match a local file
-    /// however many times the library is rescanned — downloading is the only
-    /// way to get a copy.
+    /// CivitAI did not store a filename for this image — the usual cause is a
+    /// post submitted through a challenge page, which drops the uploaded name.
+    /// Filename is the only thing the matcher has, so the file you actually
+    /// uploaded can never be recognised; the downloaded copy can, because it is
+    /// written under <see cref="CivitaiPostsService.NamelessStem"/>.
     /// </summary>
     public bool HasNoName => string.IsNullOrWhiteSpace(Name);
+
+    /// <summary>Shown only while a nameless image is still unmatched.</summary>
+    public bool NeedsNamelessDownload => HasNoName && IsUnmatched;
+
+    public string NamelessHint =>
+        "CivitAI kept no filename for this image (posts submitted through a challenge page "
+        + "lose it), so your original file cannot be recognised. Download it and rescan — "
+        + $"the copy is saved as {CivitaiPostsService.NamelessStem(CivitaiImageId)} and matches from then on.";
 
     // --- Engagement -------------------------------------------------------
     //
@@ -821,9 +884,19 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
     /// <summary>True when the numbers are the post's totals, not this image's own.</summary>
     public bool StatsArePostWide => StatsScope == "post";
 
+    /// <summary>
+    /// True when the counters came from the per-image fetch, which is the only
+    /// one that reports Buzz and views. A zero from it is a real zero, so those
+    /// chips can be shown at 0 instead of hidden — with post-wide totals a
+    /// missing counter and an untipped image look identical, and only hiding
+    /// them tells the truth.
+    /// </summary>
+    public bool StatsAreImageWide => HasStats && !StatsArePostWide;
+
     public string StatsTooltip => StatsArePostWide
-        ? "Totals for the whole post. Tips and views need a per-image fetch — "
-          + "use ↻ Fetch Upcoming, which requests them for recent posts."
+        ? "Totals for the whole post, shared by every image in it. Buzz and views are "
+          + "missing entirely — tick 'Engagement counters' in ⬇ Download to fetch the "
+          + "per-image numbers."
         : "Counts for this image.";
 
     /// <summary>Compact summary for the day list: total reactions.</summary>
@@ -832,6 +905,18 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
 
     public string CommentSummary => (Stats?.CommentCount ?? 0).ToString();
     public bool HasComments => (Stats?.CommentCount ?? 0) > 0;
+
+    public string CollectedSummary => (Stats?.CollectedCount ?? 0).ToString();
+
+    /// <summary>Buzz tipped, as shown in the preview panel's chip row.</summary>
+    public string TipSummary => (Stats?.TippedAmountCount ?? 0).ToString();
+
+    // Show-or-hide for the counters the user asked to always see: present at a
+    // real zero once the per-image numbers are in, absent while all we have is
+    // the post-wide block that cannot report them honestly.
+    public bool ShowComments => HasComments || StatsAreImageWide;
+    public bool ShowCollected => HasCollected || StatsAreImageWide;
+    public bool ShowTips => HasTips || StatsAreImageWide;
 
     public string LikeText => $"👍 {Stats?.LikeCount ?? 0}";
     public bool HasLikes => (Stats?.LikeCount ?? 0) > 0;
@@ -852,11 +937,13 @@ public class ResolvedPostImage : System.ComponentModel.INotifyPropertyChanged
     public bool HasViews => (Stats?.ViewCount ?? 0) > 0;
 
     /// <summary>
-    /// True when stats were reported but every counter is zero — worth saying
-    /// explicitly so an untouched post doesn't look like a fetch that failed.
+    /// True when stats were reported but nothing at all would be rendered —
+    /// worth saying explicitly so an untouched post doesn't look like a fetch
+    /// that failed. Once per-image numbers are in, the zeroed chips say it
+    /// themselves and this stays false.
     /// </summary>
-    public bool HasNoEngagement => HasStats && !HasReactions && !HasComments
-                                   && !HasCollected && !HasTips && !HasViews;
+    public bool HasNoEngagement => HasStats && !HasReactions && !ShowComments
+                                   && !ShowCollected && !ShowTips && !HasViews;
 
     /// <summary>
     /// True only while the post is still waiting to go live: the queue marker

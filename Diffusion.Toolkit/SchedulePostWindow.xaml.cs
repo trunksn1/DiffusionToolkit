@@ -20,10 +20,11 @@ namespace Diffusion.Toolkit
             foreach (var m in new[] { 0, 15, 30, 45 }) MinutePart.Items.Add(m.ToString("D2"));
 
             // Default to the dropped-on day at the next full hour (or noon if today
-            // is already late), never in the past.
+            // is already late). CivitAI wants at least an hour's notice, so on
+            // today that means two hours out, not one.
             var now = DateTime.Now;
             var date = targetDate.Date;
-            int hour = date == now.Date ? Math.Min(now.Hour + 1, 23) : 12;
+            int hour = date == now.Date ? Math.Min(now.Hour + 2, 23) : 12;
 
             DatePart.SelectedDate = date;
             DatePart.DisplayDateStart = now.Date;
@@ -32,6 +33,8 @@ namespace Diffusion.Toolkit
             DatePart.DisplayDateEnd = Services.CivitaiPostsService.LastSchedulableDate;
             HourPart.SelectedIndex = hour;
             MinutePart.SelectedIndex = 0;
+
+            LimitText.Text = Services.CivitaiPostsService.ScheduleLimitMessage;
         }
 
         private void Schedule_Click(object sender, RoutedEventArgs e)
@@ -47,17 +50,15 @@ namespace Diffusion.Toolkit
             int minute = MinutePart.SelectedItem is string ms && int.TryParse(ms, out var m) ? m : 0;
 
             var publishAt = date.AddHours(hour).AddMinutes(minute);
-            if (publishAt <= DateTime.Now)
+            if (publishAt < Services.CivitaiPostsService.EarliestSchedulableTime)
             {
-                MessageBox.Show(this, "The scheduled time must be in the future.", "Schedule",
+                MessageBox.Show(this, Services.CivitaiPostsService.ScheduleFloorMessage, "Schedule",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
             if (date > Services.CivitaiPostsService.LastSchedulableDate)
             {
-                MessageBox.Show(this,
-                    $"CivitAI only accepts posts scheduled up to {Services.CivitaiPostsService.MaxScheduleDaysAhead} " +
-                    $"days ahead (through {Services.CivitaiPostsService.LastSchedulableDate:d}).",
+                MessageBox.Show(this, Services.CivitaiPostsService.ScheduleLimitMessage,
                     "Schedule", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }

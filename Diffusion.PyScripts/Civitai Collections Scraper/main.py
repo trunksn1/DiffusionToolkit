@@ -495,6 +495,10 @@ def cmd_posts(args, orchestrator: DownloadOrchestrator, config: dict):
     today = datetime.date.today()
     range_from = (datetime.date.fromisoformat(args.from_date) if args.from_date
                   else today - datetime.timedelta(days=4 * 365))
+    # CivitAI refuses a publish date more than 3 CALENDAR months out (its
+    # SchedulePostModal: dayjs(now).add(3, 'month')). The longest such span is
+    # 92 days (Jun 1 -> Sep 1), so this covers the whole queue whatever the
+    # month, without needing calendar arithmetic here.
     range_to = (datetime.date.fromisoformat(args.to_date) if args.to_date
                 else today + datetime.timedelta(days=92))
     cache_path = Path(args.output) if args.output else posts_fetcher.default_cache_path()
